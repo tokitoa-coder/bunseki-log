@@ -77,6 +77,8 @@ nav#tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:
 .segmented button.on{background:var(--green);color:#fff}
 
 .upload{display:block;margin-top:14px;padding:14px;border:1px dashed #9bb3a4;border-radius:14px;text-align:center;background:#eef8f2;color:var(--green);font-weight:700}
+.levelBadge{position:absolute;top:8px;right:10px;background:rgba(0,0,0,.6);color:#fff;font-weight:700;font-size:13px;padding:3px 8px;border-radius:8px;font-variant-numeric:tabular-nums}
+#levelToggle.on{background:var(--green);color:#fff}
 .upload input{display:none}
 
 .shotsHead{display:flex;justify-content:space-between;align-items:center;margin-top:18px}
@@ -133,7 +135,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.3 α (r6)</span></h1>
+      <h1>分析Log <span>v0.3 α (r7)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -172,6 +174,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         <button data-grid="3">3×3</button>
         <button data-grid="5">5×5</button>
       </div>
+      <button id="levelToggle" class="sub full">水平器：OFF</button>
       <div class="grid">
         <button id="startCamera">カメラ起動</button>
         <button id="switchCamera" class="sub">前後切替</button>
@@ -314,6 +317,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     after: parseSlot(localStorage.al_after),
     shots: JSON.parse(localStorage.al_shots || "[]"),
     recGrid: localStorage.al_rec_grid || "center",
+    level: false,
   };
   const saveSlot = (key) => { localStorage["al_" + key] = s[key] ? JSON.stringify(s[key]) : ""; };
   const saveShots = () => {
@@ -361,10 +365,59 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   }
 
   // ---- 撮影ガイドの切替 ----
-  const drawRecordGuides = () => drawGuides($("recordGuides"), s.recGrid);
+  let levelAngle = 0; // スマホの左右の傾き（度）
+
+  const drawRecordGuides = () => {
+    drawGuides($("recordGuides"), s.recGrid);
+    if (s.level && s.recGrid !== "off") {
+      const badge = document.createElement("div");
+      badge.className = "levelBadge"; badge.id = "levelBadge";
+      $("recordGuides").appendChild(badge);
+    }
+    updateLevelLine();
+  };
+  function updateLevelLine() {
+    const h = $("recordGuides").querySelector(".center.h");
+    const badge = $("levelBadge");
+    if (!h) return;
+    if (s.level) {
+      const lv = Math.abs(levelAngle) <= 1;           // ±1°以内を水平とみなす
+      h.style.transformOrigin = "center center";
+      h.style.transform = `rotate(${-levelAngle}deg)`; // 実際の水平を示す（真の水平線）
+      h.style.background = lv ? "#39d353" : "var(--guide)";
+      h.style.height = "3px";
+      if (badge) { badge.textContent = (lv ? "水平 " : "") + levelAngle.toFixed(0) + "°"; badge.style.color = lv ? "#39d353" : "#fff"; }
+    } else {
+      h.style.transform = ""; h.style.background = ""; h.style.height = "";
+    }
+  }
   document.querySelectorAll('.segmented[data-target="record"] button').forEach((b) => {
     b.onclick = () => { s.recGrid = b.dataset.grid; localStorage.al_rec_grid = s.recGrid; setSegmented("record", s.recGrid); drawRecordGuides(); };
   });
+
+  // 水平器（傾きセンサー）
+  function onMotion(e) {
+    const a = e.accelerationIncludingGravity; if (!a) return;
+    const ax = a.x || 0, ay = a.y || 0;
+    if (Math.hypot(ax, ay) < 2) return;               // ほぼ水平置きのときは無視（数値が暴れるため）
+    levelAngle = Math.atan2(ax, -ay) * 180 / Math.PI;
+    updateLevelLine();
+  }
+  function setLevelBtn() { $("levelToggle").textContent = "水平器：" + (s.level ? "ON" : "OFF"); $("levelToggle").classList.toggle("on", s.level); }
+  async function toggleLevel() {
+    if (s.level) { window.removeEventListener("devicemotion", onMotion); s.level = false; setLevelBtn(); drawRecordGuides(); return; }
+    try {
+      if (typeof DeviceMotionEvent !== "undefined" && DeviceMotionEvent.requestPermission) {
+        const perm = await DeviceMotionEvent.requestPermission();     // iOSは許可が必要
+        if (perm !== "granted") { toast("recordMsg", "水平器を使うには「許可」を選んでください"); return; }
+      }
+      if (s.recGrid === "off") { s.recGrid = "center"; localStorage.al_rec_grid = "center"; setSegmented("record", "center"); }
+      window.addEventListener("devicemotion", onMotion);
+      s.level = true; setLevelBtn(); drawRecordGuides();
+      toast("recordMsg", "水平器ON：横線が水平の目安です");
+    } catch (err) { toast("recordMsg", "この端末では水平器を使えません"); }
+  }
+  $("levelToggle").onclick = toggleLevel;
 
   /* =======================================================
      ① 撮影・録画
@@ -488,7 +541,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   function updateCompare() { showImage("before"); showImage("after"); }
   function download(data, name) {
     if (!data) return;
-    const safe = ($("patient").value || "patient").replace(/[\\/:*?"<>|]/g, "_");
+    const safe = ($("patient").value || "patient").replace(/[\/:*?"<>|]/g, "_");
     const a = document.createElement("a");
     a.href = data; a.download = `${safe}_${name}.jpg`; a.click();
   }
@@ -670,6 +723,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   $("close").onclick = () => dialog.close();
 
   setSegmented("record", s.recGrid);
+  setLevelBtn();
   drawRecordGuides();
   updateCompare();
   renderShots();
