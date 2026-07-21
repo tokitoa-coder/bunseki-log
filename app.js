@@ -110,6 +110,23 @@
      ② 再生・静止画切り出し
      =======================================================*/
   $("speed").onchange = (e) => ($("video").playbackRate = +e.target.value);
+
+  // シークスライダー（コマ選び用）。0〜1000の目盛で動画位置に連動
+  const video = $("video"), seek = $("seek"), seekTime = $("seekTime");
+  const fmtTime2 = (t) => Math.floor(t / 60) + ":" + (t % 60).toFixed(2).padStart(5, "0");
+  video.addEventListener("loadedmetadata", () => { seek.value = 0; seekTime.textContent = fmtTime2(0); });
+  video.addEventListener("timeupdate", () => {
+    if (!video.duration) return;
+    seek.value = Math.round((video.currentTime / video.duration) * 1000);
+    seekTime.textContent = fmtTime2(video.currentTime);
+  });
+  seek.addEventListener("input", () => {
+    if (!video.duration) return;
+    video.pause();
+    video.currentTime = (seek.value / 1000) * video.duration;
+    seekTime.textContent = fmtTime2(video.currentTime);
+  });
+
   function step(delta) {
     const v = $("video");
     if (!v.src) return toast("reviewMsg", "先に動画を選んでください");
@@ -128,7 +145,7 @@
     c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
     s.shots.push({ id: Date.now() + Math.random(), data: c.toDataURL("image/jpeg", 0.9), time: v.currentTime });
     saveShots(); renderShots();
-    toast("reviewMsg", fmtTime(v.currentTime) + " を追加しました");
+    toast("reviewMsg", `③比較の下に追加しました（${fmtTime(v.currentTime)}・全${s.shots.length}枚）`);
   };
   $("clearShots").onclick = () => {
     if (confirm("静止画一覧を空にしますか？")) { s.shots = []; saveShots(); renderShots(); }
@@ -145,9 +162,8 @@
       const edited = shot.edited ? '<span class="edited">編集済</span>' : "";
       d.innerHTML =
         `<img src="${shot.edited || shot.data}" alt="${i + 1}枚目">` +
-        `<p class="cap">${i + 1}枚目・${fmtTime(shot.time)} ${edited}</p>` +
+        `<p class="cap">${i + 1}枚目・${fmtTime(shot.time)} ${edited}<br><span class="tapHint">タップで編集</span></p>` +
         `<div class="shotBtns">` +
-        `<button class="editBtn" data-a="edit">編集する</button>` +
         `<button data-a="before">Before</button>` +
         `<button data-a="after">After</button>` +
         `<button data-a="download" class="sub">保存</button>` +
@@ -305,8 +321,7 @@
 
   // ---- 現在の見た目をcanvasへ焼き込み（保存・反映で使用） ----
   function bake() {
-    if (!ed.shot || !ed.shot.data) return Promise.reject(new Error("編集する画像がありません"));
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const r = editStage.getBoundingClientRect();
       const W = r.width, H = r.height, dpr = Math.min(window.devicePixelRatio || 1, 3);
       const c = document.createElement("canvas"); c.width = W * dpr; c.height = H * dpr;
@@ -325,7 +340,6 @@
         drawGuidesOnCanvas(x, W, H);
         resolve(c.toDataURL("image/jpeg", 0.85));
       };
-      img.onerror = () => reject(new Error("画像を読み込めませんでした"));
       img.src = ed.shot.data;
     });
   }
@@ -345,21 +359,14 @@
     ed.shot.edit = { grid: ed.mode, vx: ed.vx, hy: ed.hy, tx: ed.tx, ty: ed.ty, scale: ed.scale };
     saveShots(); renderShots();
   }
-  $("edSave").onclick = async () => {
-    try { commitEdit(await bake()); toast("edMsg", "保存しました"); }
-    catch (e) { toast("edMsg", e.message); }
-  };
+  $("edSave").onclick = async () => { commitEdit(await bake()); toast("edMsg", "保存しました"); };
   $("edToBefore").onclick = async () => {
-    try {
-      const d = await bake(); commitEdit(d);
-      s.before = d; localStorage.al_before = d; updateCompare(); toast("edMsg", "Beforeに反映しました");
-    } catch (e) { toast("edMsg", e.message); }
+    const d = await bake(); commitEdit(d);
+    s.before = d; localStorage.al_before = d; updateCompare(); toast("edMsg", "Beforeに反映しました");
   };
   $("edToAfter").onclick = async () => {
-    try {
-      const d = await bake(); commitEdit(d);
-      s.after = d; localStorage.al_after = d; updateCompare(); toast("edMsg", "Afterに反映しました");
-    } catch (e) { toast("edMsg", e.message); }
+    const d = await bake(); commitEdit(d);
+    s.after = d; localStorage.al_after = d; updateCompare(); toast("edMsg", "Afterに反映しました");
   };
 
   /* ---- ダイアログ・初期化 ---- */

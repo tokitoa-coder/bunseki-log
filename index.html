@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
   <meta name="theme-color" content="#0f5132">
   <title>分析Log v0.3</title>
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
   <header>
@@ -68,6 +68,10 @@
       <div class="stage">
         <video id="video" controls playsinline></video>
       </div>
+      <div class="seekRow">
+        <input id="seek" type="range" min="0" max="1000" value="0" step="1" aria-label="再生位置">
+        <span id="seekTime" class="time">0:00.00</span>
+      </div>
       <label>再生速度
         <select id="speed">
           <option value=".25">0.25倍</option>
@@ -79,23 +83,16 @@
       <div class="grid">
         <button id="back" class="sub">◀ 1コマ戻す</button>
         <button id="forward" class="sub">1コマ進める ▶</button>
-        <button id="captureBtn">静止画を追加</button>
-        <button id="clearShots" class="sub">一覧を空にする</button>
       </div>
+      <button id="captureBtn" class="full">この場面を静止画に追加</button>
       <canvas id="canvas" hidden></canvas>
-      <div class="shotsHead">
-        <h3>切り出した静止画</h3>
-        <span id="shotCount" class="pill">0枚</span>
-      </div>
-      <p class="hint">画像をタップすると編集画面が開きます。</p>
-      <div id="shotGallery" class="shots"></div>
       <p id="reviewMsg" class="msg"></p>
     </section>
 
     <!-- ③ 比較 -->
     <section id="compare" class="panel card">
       <h2>Before / After</h2>
-      <p>切り出し一覧の「Before」「After」から設定できます。編集した画像はそのまま反映されます。</p>
+      <p>下の一覧の「Before」「After」から設定できます。編集した画像はそのまま反映されます。</p>
       <div class="compare">
         <div>
           <h3>Before</h3>
@@ -114,6 +111,14 @@
       </label>
       <button id="saveMemo">メモを保存</button>
       <p id="memoMsg" class="msg"></p>
+
+      <div class="shotsHead">
+        <h3>切り出した静止画</h3>
+        <span id="shotCount" class="pill">0枚</span>
+      </div>
+      <p class="hint">画像をタップすると編集画面が開きます。</p>
+      <div id="shotGallery" class="shots"></div>
+      <button id="clearShots" class="sub full">一覧を空にする</button>
     </section>
   </main>
 
@@ -161,6 +166,6 @@
     <button id="close" class="full">閉じる</button>
   </dialog>
 
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
