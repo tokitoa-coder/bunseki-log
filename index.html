@@ -49,6 +49,28 @@ button:disabled{opacity:.45}
 .camTools .sub{background:#1b2a21;color:#cfe6d8}
 .camTools #levelToggle.on{background:var(--green);color:#fff}
 
+/* 全画面プレイヤー */
+.playView{position:fixed;inset:0;z-index:20;background:#000;display:flex;flex-direction:column;color:#fff}
+.playView[hidden]{display:none}
+.playView .camStage video{width:100%;height:100%;object-fit:contain;background:#000}
+.playCtrls{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.playCtrls .spd{margin:0;color:#cfe6d8;font-size:13px;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.playCtrls .spd select{width:auto;padding:8px}
+.playCtrls .sub{flex:1;background:#1b2a21;color:#cfe6d8}
+.time{font-variant-numeric:tabular-nums;font-weight:700}
+
+/* 全画面比較 */
+.compareView{position:fixed;inset:0;z-index:20;background:#0b120e;display:flex;flex-direction:column;color:#fff}
+.compareView[hidden]{display:none}
+.compareFS{flex:1;min-height:0;display:flex;gap:6px;padding:8px}
+.compareFS figure{flex:1;min-width:0;margin:0;display:flex;flex-direction:column}
+.compareFS figcaption{text-align:center;font-weight:700;padding:4px;font-size:13px;color:#cfe6d8}
+.compareFS figcaption span{color:#7fd6a3;font-size:12px}
+.fsImg{flex:1;min-height:0;position:relative;background:#000;border-radius:10px;display:grid;place-items:center;overflow:hidden}
+.fsImg img{width:100%;height:100%;object-fit:contain;display:none}
+.fsImg span{color:#6b7d72}
+.fsHint{text-align:center;color:#7f9488;margin:0 0 8px}
+
 main{width:min(900px,100%);margin:auto;padding:14px 14px 80px}
 .card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:12px;box-shadow:0 8px 24px rgba(14,61,37,.08)}
 label{display:block;font-weight:700;margin:0 0 8px}
@@ -153,7 +175,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.3 α (r9)</span></h1>
+      <h1>分析Log <span>v0.3 α (r10)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -190,9 +212,10 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     <!-- ② 再生 -->
     <section id="review" class="panel card">
       <h2>再生・静止画切り出し</h2>
-      <div class="stage">
+      <div id="reviewStage" class="stage">
         <video id="video" controls playsinline preload="auto"></video>
       </div>
+      <button id="openPlay" class="full big">▶ 全画面で再生・切り出し</button>
       <p class="hint">下の再生バーを指でなぞると場面を選べます。細かい調整は「1コマ戻す／進める」で。</p>
       <label>再生速度
         <select id="speed">
@@ -230,6 +253,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         </div>
       </div>
       <button id="swap" class="sub full">左右を入れ替える</button>
+      <button id="openCompareFS" class="full big">⛶ 全画面で比較する</button>
       <label for="memo">所見メモ
         <textarea id="memo" rows="5" placeholder="例：右肩の挙上が改善"></textarea>
       </label>
@@ -245,6 +269,52 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <button id="clearShots" class="sub full">一覧を空にする</button>
     </section>
   </main>
+
+  <!-- 全画面プレイヤー（再生・切り出し） -->
+  <div id="playView" class="playView" hidden>
+    <div class="editorBar top">
+      <button id="playClose" class="sub">閉じる</button>
+      <span>再生・切り出し</span>
+      <span id="playTime" class="time">0:00.00</span>
+    </div>
+    <div id="playStage" class="camStage"></div>
+    <div class="camTools">
+      <div class="playCtrls">
+        <label class="spd">速度
+          <select id="speed2">
+            <option value=".25">0.25倍</option>
+            <option value=".5">0.5倍</option>
+            <option value=".75">0.75倍</option>
+            <option value="1" selected>1.0倍</option>
+          </select>
+        </label>
+        <button id="back2" class="sub">◀ 1コマ</button>
+        <button id="forward2" class="sub">1コマ ▶</button>
+      </div>
+      <button id="capture2" class="full big">■ この場面を切り出し</button>
+      <p id="play2Msg" class="msg"></p>
+    </div>
+  </div>
+
+  <!-- 全画面比較 -->
+  <div id="compareView" class="compareView" hidden>
+    <div class="editorBar top">
+      <button id="compareClose" class="sub">閉じる</button>
+      <span>Before / After</span>
+      <button id="compareSwap" class="sub">入替</button>
+    </div>
+    <div class="compareFS">
+      <figure>
+        <figcaption>Before <span id="beforeCapFS"></span></figcaption>
+        <div class="fsImg"><img id="beforeFS" alt="Before"><span id="beforeFSEmpty">画像なし</span></div>
+      </figure>
+      <figure>
+        <figcaption>After <span id="afterCapFS"></span></figcaption>
+        <div class="fsImg"><img id="afterFS" alt="After"><span id="afterFSEmpty">画像なし</span></div>
+      </figure>
+    </div>
+    <p class="hint fsHint">横向きにすると大きく見られます</p>
+  </div>
 
   <!-- 全画面カメラ -->
   <div id="camView" class="camView" hidden>
@@ -515,17 +585,18 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   /* =======================================================
      ② 再生・静止画切り出し
      =======================================================*/
-  $("speed").onchange = (e) => ($("video").playbackRate = +e.target.value);
   const video = $("video");
+  const setSpeed = (v) => { video.playbackRate = +v; $("speed").value = v; $("speed2").value = v; };
+  $("speed").onchange = (e) => setSpeed(e.target.value);
+  $("speed2").onchange = (e) => setSpeed(e.target.value);
 
   function step(delta) {
-    const v = $("video");
-    if (!v.src) return toast("reviewMsg", "先に動画を選んでください");
-    v.pause();
-    v.currentTime = clamp(v.currentTime + delta, 0, v.duration || Infinity);
+    if (!video.src) return toast("reviewMsg", "先に動画を選んでください");
+    video.pause();
+    video.currentTime = clamp(video.currentTime + delta, 0, video.duration || Infinity);
   }
-  $("back").onclick = () => step(-1 / 30);
-  $("forward").onclick = () => step(1 / 30);
+  $("back").onclick = $("back2").onclick = () => step(-1 / 30);
+  $("forward").onclick = $("forward2").onclick = () => step(1 / 30);
 
   const fmtTime = (t) => Math.floor(t / 60) + ":" + (t % 60).toFixed(2).padStart(5, "0");
   const pad = (n) => String(n).padStart(2, "0");
@@ -535,15 +606,34 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
-  $("captureBtn").onclick = () => {
-    const v = $("video"), c = $("canvas");
-    if (!v.src || v.readyState < 2) return toast("reviewMsg", "動画を再生できる状態にしてください");
+  function captureShot() {
+    const v = video, c = $("canvas");
+    if (!v.src || v.readyState < 2) { toast("reviewMsg", "動画を再生できる状態にしてください"); toast("play2Msg", "動画を再生できる状態にしてください"); return; }
     c.width = v.videoWidth; c.height = v.videoHeight;
     c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
     s.shots.push({ id: Date.now() + Math.random(), data: c.toDataURL("image/jpeg", 0.9), time: v.currentTime, date: Date.now() });
     saveShots(); renderShots(); // localStorageへ自動保存
-    toast("reviewMsg", `③比較の下に自動保存しました（全${s.shots.length}枚）`);
-  };
+    const msg = `③比較の下に自動保存しました（全${s.shots.length}枚）`;
+    toast("reviewMsg", msg); toast("play2Msg", msg);
+  }
+  $("captureBtn").onclick = captureShot;
+  $("capture2").onclick = captureShot;
+
+  // 全画面プレイヤー：videoを移動して表示
+  function openPlay() {
+    if (!video.src) return toast("reviewMsg", "先に撮影するか、端末の動画を選んでください");
+    $("playStage").appendChild(video);
+    $("playView").hidden = false; document.body.style.overflow = "hidden";
+    toast("play2Msg", "");
+  }
+  function closePlay() {
+    $("reviewStage").appendChild(video);
+    $("playView").hidden = true; document.body.style.overflow = "";
+  }
+  $("openPlay").onclick = openPlay;
+  $("playClose").onclick = closePlay;
+  video.addEventListener("timeupdate", () => { $("playTime").textContent = fmtTime(video.currentTime || 0); });
+
   $("clearShots").onclick = () => {
     if (confirm("静止画一覧を空にしますか？")) { s.shots = []; saveShots(); renderShots(); }
   };
@@ -593,8 +683,21 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     } else {
       im.style.display = "none"; empty.style.display = "block"; btn.disabled = true; cap.textContent = "";
     }
+    // 全画面比較側も同期
+    const imFS = $(key + "FS"), emptyFS = $(key + "FSEmpty"), capFS = $(key + "CapFS");
+    if (imFS) {
+      if (slot && slot.img) { imFS.src = slot.img; imFS.style.display = "block"; emptyFS.style.display = "none"; capFS.textContent = slot.date ? fmtDate(slot.date) : ""; }
+      else { imFS.style.display = "none"; emptyFS.style.display = "block"; capFS.textContent = ""; }
+    }
   }
   function updateCompare() { showImage("before"); showImage("after"); }
+  // 全画面比較の開閉
+  $("openCompareFS").onclick = () => {
+    if (!(s.before && s.before.img) && !(s.after && s.after.img)) return toast("memoMsg", "先にBefore/Afterを設定してください");
+    updateCompare(); $("compareView").hidden = false; document.body.style.overflow = "hidden";
+  };
+  $("compareClose").onclick = () => { $("compareView").hidden = true; document.body.style.overflow = ""; };
+  $("compareSwap").onclick = () => { [s.before, s.after] = [s.after, s.before]; saveSlot("before"); saveSlot("after"); updateCompare(); };
   function download(data, name) {
     if (!data) return;
     const safe = ($("patient").value || "patient").replace(/[\/:*?"<>|]/g, "_");
