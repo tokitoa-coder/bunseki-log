@@ -174,9 +174,16 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .measureLayer{position:absolute;inset:0;pointer-events:none;overflow:visible}
 .measureLayer line{stroke:#39d353;stroke-width:2}
 .measureLayer circle{fill:#39d353;stroke:#0b120e;stroke-width:2}
+#drawLayer line,#drawLayer polyline,#drawLayer path,#drawLayer circle,#drawLayer ellipse{fill:none}
+#drawLayer text{font-weight:700}
+.drawOpts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0}
+.drawOpts .sw{width:30px;height:30px;border-radius:50%;border:2px solid #24352b;box-sizing:border-box}
+.drawOpts .sw.on{border-color:#fff;box-shadow:0 0 0 2px var(--green)}
+.drawOpts #drawWidth{width:auto;padding:8px}
+.drawOpts .sub{flex:1;min-width:80px}
 .measureOut{margin:6px 0;min-height:20px;color:#eafff0;font-weight:700;background:#12241a;border:1px solid #24352b;border-radius:10px;padding:8px 10px;text-align:center}
 .measureOut:empty{display:none}
-.editorTools{padding:12px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:#0f1a13;border-top:1px solid #24352b}
+.editorTools{padding:12px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:#0f1a13;border-top:1px solid #24352b;max-height:56vh;overflow-y:auto}
 .editorTools .segmented>span{color:#9db3a6}
 .editorTools .segmented button{background:#1b2a21;color:#cfe6d8}
 .editorTools .segmented button.on{background:var(--green);color:#fff}
@@ -199,7 +206,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.3 β (r11)</span></h1>
+      <h1>分析Log <span>v0.3 β (r12)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -409,6 +416,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     <div id="editStage" class="editStage">
       <div id="editImgWrap" class="editImgWrap"><img id="editImg" alt="編集中の画像"></div>
       <div id="editGuides" class="guides"></div>
+      <svg id="drawLayer" class="measureLayer"></svg>
       <svg id="measureLayer" class="measureLayer"></svg>
     </div>
 
@@ -430,6 +438,32 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         <button data-m="scale">基準登録</button>
       </div>
       <p id="measureOut" class="measureOut"></p>
+      <div class="segmented" data-target="draw">
+        <span>描画</span>
+        <button data-d="off" class="on">なし</button>
+        <button data-d="free">自由線</button>
+        <button data-d="line">直線</button>
+        <button data-d="hline">水平</button>
+        <button data-d="vline">垂直</button>
+        <button data-d="arrow">矢印</button>
+        <button data-d="circle">円</button>
+        <button data-d="text">文字</button>
+      </div>
+      <div class="drawOpts">
+        <span class="sw on" data-color="#ff3b30" style="background:#ff3b30"></span>
+        <span class="sw" data-color="#0a84ff" style="background:#0a84ff"></span>
+        <span class="sw" data-color="#30d158" style="background:#30d158"></span>
+        <span class="sw" data-color="#ffd60a" style="background:#ffd60a"></span>
+        <span class="sw" data-color="#ffffff" style="background:#fff"></span>
+        <span class="sw" data-color="#111111" style="background:#111"></span>
+        <select id="drawWidth" aria-label="線の太さ">
+          <option value="3">細</option>
+          <option value="6" selected>中</option>
+          <option value="11">太</option>
+        </select>
+        <button id="drawUndo" class="sub">1つ戻す</button>
+        <button id="drawClear" class="sub">全消去</button>
+      </div>
       <div class="grid">
         <button id="edZoomOut" class="sub">ズーム −</button>
         <button id="edZoomIn" class="sub">ズーム ＋</button>
@@ -801,13 +835,15 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   const ed = { shot: null, mode: "center", vx: 0.5, hy: 0.5, tx: 0, ty: 0, scale: 1, nw: 1, nh: 1 };
   const editStage = $("editStage"), editImg = $("editImg"), editWrap = $("editImgWrap"), editGuides = $("editGuides");
   const measure = { mode: "off", pts: [] };
+  const draw = { tool: "off", color: "#ff3b30", w: 6, cur: null }; // 描画ツール状態
   let pxPerCm = parseFloat(localStorage.al_scale) || 0;  // 1cmあたりのピクセル数（基準登録で決定）
 
-  const applyTransform = () => { editWrap.style.transform = `translate(${ed.tx}px,${ed.ty}px) scale(${ed.scale})`; renderMeasure(); };
+  const applyTransform = () => { editWrap.style.transform = `translate(${ed.tx}px,${ed.ty}px) scale(${ed.scale})`; renderMeasure(); renderDraw(); };
   const drawEditGuides = () => drawGuides(editGuides, ed.mode, ed.vx, ed.hy, true);
 
   function openEditor(shot) {
     ed.shot = shot;
+    if (!shot.draws) shot.draws = [];
     const e = shot.edit || {};
     ed.mode = e.grid || "center";
     ed.vx = e.vx ?? 0.5; ed.hy = e.hy ?? 0.5;
@@ -816,7 +852,9 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     editImg.src = shot.data; // 常に元画像から編集（非破壊）
     $("edTitle").textContent = `${s.shots.indexOf(shot) + 1}枚目・${fmtTime(shot.time)}`;
     setSegmented("edit", ed.mode);
-    measure.mode = "off"; measure.pts = []; setSegmented("measure", "off"); $("measureOut").textContent = ""; updateHint(); renderMeasure();
+    measure.mode = "off"; measure.pts = []; setSegmented("measure", "off"); $("measureOut").textContent = "";
+    draw.tool = "off"; draw.cur = null; setSegmented("draw", "off");
+    updateHint(); renderMeasure(); renderDraw();
     toast("edMsg", "");
     $("editor").hidden = false;
     document.body.style.overflow = "hidden";
@@ -872,7 +910,11 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     $("edHint").textContent = map[measure.mode] || map.off;
   }
   document.querySelectorAll('.segmented[data-target="measure"] button').forEach((b) => {
-    b.onclick = () => { measure.mode = b.dataset.m; measure.pts = []; setSegmented("measure", measure.mode); $("measureOut").textContent = ""; updateHint(); renderMeasure(); };
+    b.onclick = () => {
+      measure.mode = b.dataset.m; measure.pts = []; setSegmented("measure", measure.mode); $("measureOut").textContent = "";
+      if (measure.mode !== "off") { draw.tool = "off"; setSegmented("draw", "off"); }
+      updateHint(); renderMeasure();
+    };
   });
 
   function placePoint(sx, sy) {
@@ -906,6 +948,88 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       else { measure.pts = []; out.textContent = "基準登録をキャンセルしました"; }
     }
   }
+  /* ---- 描画ツール（自由線・直線・水平・垂直・矢印・円・文字） ---- */
+  const drawHints = {
+    off: "1本指＝移動 / 2本指＝拡大縮小 / 中心線ドラッグ / ダブルタップでリセット",
+    free: "指でなぞって自由に線を描けます", line: "始点から終点までドラッグで直線",
+    hline: "ドラッグで水平線", vline: "ドラッグで垂直線", arrow: "ドラッグで矢印",
+    circle: "中心から外へドラッグで円", text: "置きたい場所をタップ→文字を入力",
+  };
+  document.querySelectorAll('.segmented[data-target="draw"] button').forEach((b) => {
+    b.onclick = () => {
+      draw.tool = b.dataset.d; setSegmented("draw", draw.tool);
+      if (draw.tool !== "off") { measure.mode = "off"; measure.pts = []; setSegmented("measure", "off"); $("measureOut").textContent = ""; renderMeasure(); }
+      $("edHint").textContent = drawHints[draw.tool] || drawHints.off;
+    };
+  });
+  document.querySelectorAll(".drawOpts .sw").forEach((el) => {
+    el.onclick = () => { draw.color = el.dataset.color; document.querySelectorAll(".drawOpts .sw").forEach((x) => x.classList.toggle("on", x === el)); };
+  });
+  $("drawWidth").onchange = (e) => { draw.w = +e.target.value; };
+  $("drawUndo").onclick = () => { if (ed.shot && ed.shot.draws.length) { ed.shot.draws.pop(); saveShots(); renderDraw(); } };
+  $("drawClear").onclick = () => { if (ed.shot && ed.shot.draws.length && confirm("描き込みを全部消しますか？")) { ed.shot.draws = []; saveShots(); renderDraw(); } };
+
+  function drawStart(sx, sy) {
+    const p = toNorm(sx, sy);
+    if (draw.tool === "text") {
+      const str = prompt("文字を入力"); if (str) { ed.shot.draws.push({ t: "text", color: draw.color, w: draw.w, p, str }); saveShots(); renderDraw(); }
+      draw.cur = null; return;
+    }
+    if (draw.tool === "free") draw.cur = { t: "free", color: draw.color, w: draw.w, pts: [p] };
+    else draw.cur = { t: draw.tool, color: draw.color, w: draw.w, a: p, b: p };
+    renderDraw();
+  }
+  function drawMove(sx, sy) {
+    if (!draw.cur) return;
+    const p = toNorm(sx, sy);
+    if (draw.cur.t === "free") draw.cur.pts.push(p);
+    else { draw.cur.b = draw.cur.t === "hline" ? { u: p.u, v: draw.cur.a.v } : draw.cur.t === "vline" ? { u: draw.cur.a.u, v: p.v } : p; }
+    renderDraw();
+  }
+  function drawEnd() {
+    if (!draw.cur) return;
+    const c = draw.cur; draw.cur = null;
+    const tiny = c.t === "free" ? c.pts.length < 2 : (Math.abs(c.a.u - c.b.u) < 0.005 && Math.abs(c.a.v - c.b.v) < 0.005);
+    if (!tiny) { ed.shot.draws.push(c); saveShots(); }
+    renderDraw();
+  }
+  function strokeW(w) { const { dw } = fitRect(); return Math.max(1, w * (dw / (ed.nw || 1)) * ed.scale); } // 画面上の線幅
+  function renderDraw() {
+    const svg = $("drawLayer"); if (!svg) return;
+    const NS = "http://www.w3.org/2000/svg";
+    svg.innerHTML = "";
+    const items = (ed.shot && ed.shot.draws ? ed.shot.draws : []).concat(draw.cur ? [draw.cur] : []);
+    items.forEach((it) => {
+      const sw = strokeW(it.w);
+      if (it.t === "free") {
+        const pl = document.createElementNS(NS, "polyline");
+        pl.setAttribute("points", it.pts.map((p) => { const s = toScreen(p); return s.x + "," + s.y; }).join(" "));
+        pl.setAttribute("stroke", it.color); pl.setAttribute("stroke-width", sw); pl.setAttribute("stroke-linecap", "round"); pl.setAttribute("stroke-linejoin", "round");
+        svg.appendChild(pl);
+      } else if (it.t === "circle") {
+        const a = toScreen(it.a), b = toScreen(it.b), r = Math.hypot(b.x - a.x, b.y - a.y);
+        const c = document.createElementNS(NS, "circle"); c.setAttribute("cx", a.x); c.setAttribute("cy", a.y); c.setAttribute("r", r);
+        c.setAttribute("stroke", it.color); c.setAttribute("stroke-width", sw); svg.appendChild(c);
+      } else if (it.t === "text") {
+        const p = toScreen(it.p), t = document.createElementNS(NS, "text");
+        t.setAttribute("x", p.x); t.setAttribute("y", p.y); t.setAttribute("fill", it.color);
+        t.setAttribute("font-size", Math.max(12, strokeW(it.w) * 4)); t.textContent = it.str; svg.appendChild(t);
+      } else { // line / hline / vline / arrow
+        const a = toScreen(it.a), b = toScreen(it.b);
+        const l = document.createElementNS(NS, "line"); l.setAttribute("x1", a.x); l.setAttribute("y1", a.y); l.setAttribute("x2", b.x); l.setAttribute("y2", b.y);
+        l.setAttribute("stroke", it.color); l.setAttribute("stroke-width", sw); l.setAttribute("stroke-linecap", "round"); svg.appendChild(l);
+        if (it.t === "arrow") {
+          const ang = Math.atan2(b.y - a.y, b.x - a.x), h = Math.max(10, sw * 3);
+          [ang + Math.PI * 0.83, ang - Math.PI * 0.83].forEach((r) => {
+            const hl = document.createElementNS(NS, "line");
+            hl.setAttribute("x1", b.x); hl.setAttribute("y1", b.y); hl.setAttribute("x2", b.x + Math.cos(r) * h); hl.setAttribute("y2", b.y + Math.sin(r) * h);
+            hl.setAttribute("stroke", it.color); hl.setAttribute("stroke-width", sw); hl.setAttribute("stroke-linecap", "round"); svg.appendChild(hl);
+          });
+        }
+      }
+    });
+  }
+
   function renderMeasure() {
     const svg = $("measureLayer"); if (!svg) return;
     svg.innerHTML = "";
@@ -930,6 +1054,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     if (pointers.size === 2) { startPinch(); return; }
     const r = editStage.getBoundingClientRect();
     const lx = e.clientX - r.left, ly = e.clientY - r.top;
+    if (draw.tool !== "off") { gesture = { type: "draw", lx, ly, t: Date.now(), moved: false }; drawStart(lx, ly); return; }
     if (measure.mode !== "off") { gesture = { type: "measure", lx, ly, t: Date.now(), moved: false }; return; }
     const nearV = ed.mode !== "off" && Math.abs(lx - ed.vx * r.width) <= HIT;
     const nearH = ed.mode !== "off" && Math.abs(ly - ed.hy * r.height) <= HIT;
@@ -950,6 +1075,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     if (!gesture) return;
     const lx = e.clientX - r.left, ly = e.clientY - r.top;
     if (Math.abs(lx - gesture.lx) > 4 || Math.abs(ly - gesture.ly) > 4) gesture.moved = true;
+    if (gesture.type === "draw") { drawMove(lx, ly); return; }
     if (gesture.type === "pan") { ed.tx = gesture.tx + (lx - gesture.lx); ed.ty = gesture.ty + (ly - gesture.ly); applyTransform(); }
     else if (gesture.type === "vline") { ed.vx = clamp(lx / r.width, 0, 1); drawEditGuides(); }
     else if (gesture.type === "hline") { ed.hy = clamp(ly / r.height, 0, 1); drawEditGuides(); }
@@ -974,13 +1100,14 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   function endPointer(e) {
     if (!pointers.has(e.pointerId)) return;
     pointers.delete(e.pointerId);
-    if (gesture && gesture.type === "measure") {
+    if (gesture && gesture.type === "draw") { drawEnd(); }
+    else if (gesture && gesture.type === "measure") {
       if (!gesture.moved && Date.now() - gesture.t < 300 && pointers.size === 0) placePoint(gesture.lx, gesture.ly);
     } else if (gesture && gesture.type !== "pinch" && !gesture.moved && Date.now() - gesture.t < 250 && pointers.size === 0) {
       const now = Date.now();
-      if (now - lastTap < 300) { resetView(); lastTap = 0; } else lastTap = now;   // ダブルタップでリセット（測定中は無効）
+      if (now - lastTap < 300) { resetView(); lastTap = 0; } else lastTap = now;   // ダブルタップでリセット（測定・描画中は無効）
     }
-    if (pointers.size === 1 && measure.mode === "off") {
+    if (pointers.size === 1 && measure.mode === "off" && draw.tool === "off") {
       const p = [...pointers.values()][0], r = editStage.getBoundingClientRect();
       gesture = { type: "pan", lx: p.x - r.left, ly: p.y - r.top, tx: ed.tx, ty: ed.ty, t: Date.now(), moved: true };
     } else if (pointers.size === 0) gesture = null;
@@ -1007,9 +1134,30 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         x.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
         x.restore();
         drawGuidesOnCanvas(x, W, H);
+        drawDrawingsOnCanvas(x);
         resolve(c.toDataURL("image/jpeg", 0.85));
       };
       img.src = ed.shot.data;
+    });
+  }
+  function drawDrawingsOnCanvas(x) {
+    const items = (ed.shot && ed.shot.draws) || [];
+    items.forEach((it) => {
+      x.strokeStyle = it.color; x.fillStyle = it.color; x.lineWidth = strokeW(it.w); x.lineCap = "round"; x.lineJoin = "round";
+      if (it.t === "free") {
+        x.beginPath(); it.pts.forEach((p, i) => { const s = toScreen(p); i ? x.lineTo(s.x, s.y) : x.moveTo(s.x, s.y); }); x.stroke();
+      } else if (it.t === "circle") {
+        const a = toScreen(it.a), b = toScreen(it.b); x.beginPath(); x.arc(a.x, a.y, Math.hypot(b.x - a.x, b.y - a.y), 0, 7); x.stroke();
+      } else if (it.t === "text") {
+        const p = toScreen(it.p); x.font = `bold ${Math.max(12, strokeW(it.w) * 4)}px sans-serif`; x.fillText(it.str, p.x, p.y);
+      } else {
+        const a = toScreen(it.a), b = toScreen(it.b);
+        x.beginPath(); x.moveTo(a.x, a.y); x.lineTo(b.x, b.y); x.stroke();
+        if (it.t === "arrow") {
+          const ang = Math.atan2(b.y - a.y, b.x - a.x), h = Math.max(10, strokeW(it.w) * 3);
+          [ang + Math.PI * 0.83, ang - Math.PI * 0.83].forEach((rr) => { x.beginPath(); x.moveTo(b.x, b.y); x.lineTo(b.x + Math.cos(rr) * h, b.y + Math.sin(rr) * h); x.stroke(); });
+        }
+      }
     });
   }
   function drawGuidesOnCanvas(x, W, H) {
