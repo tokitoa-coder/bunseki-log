@@ -1,18 +1,166 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>分析Log v0.2</title><link rel="stylesheet" href="style.css"></head>
-<body><header><div><small>いずみ整骨院・試作版</small><h1>分析Log <span>v0.2 α</span></h1></div><button id="help">使い方</button></header>
-<main><section class="card"><label>患者名・管理番号</label><div class="row"><input id="patient" placeholder="例：患者001"><button id="savePatient">保存</button></div><p id="patientMsg"></p></section>
-<nav><button class="tab active" data-id="record">① 撮影</button><button class="tab" data-id="review">② 再生</button><button class="tab" data-id="compare">③ 比較</button></nav>
-<section id="record" class="panel active card"><h2>撮影</h2><p>縦線と横線の中心に身体を合わせて撮影します。</p>
-<div class="stage"><video id="camera" autoplay muted playsinline></video><div class="vline"></div><div class="hline"></div><div class="dot"></div><div id="cameraMsg" class="overlay">「カメラ起動」を押してください</div></div>
-<div class="grid"><button id="startCamera">カメラ起動</button><button id="switchCamera" class="sub">前後切替</button><button id="startRec" class="red" disabled>録画開始</button><button id="stopRec" class="sub" disabled>録画停止</button></div>
-<label class="upload">端末の動画を選ぶ<input id="upload" type="file" accept="video/*" capture="environment"></label><p id="recordMsg"></p></section>
-<section id="review" class="panel card"><h2>再生・静止画切り出し</h2><div class="stage"><video id="video" controls playsinline></video></div>
-<label>再生速度<select id="speed"><option value=".25">0.25倍</option><option value=".5">0.5倍</option><option value=".75">0.75倍</option><option value="1" selected>1.0倍</option></select></label>
-<div class="grid"><button id="back" class="sub">◀ 1コマ戻す</button><button id="forward" class="sub">1コマ進める ▶</button><button id="captureBtn">静止画を追加</button><button id="clearShots" class="sub">一覧を空にする</button></div>
-<canvas id="canvas" hidden></canvas><div class="shotsHead"><h3>この動画から切り出した静止画</h3><span id="shotCount">0枚</span></div><div id="shotGallery" class="shots"></div><p id="reviewMsg"></p></section>
-<section id="compare" class="panel card"><h2>Before / After</h2><p>切り出し一覧からBefore・Afterへ設定できます。</p><div class="compare">
-<div><h3>Before</h3><div class="photo"><img id="before"><span id="beforeEmpty">画像なし</span></div><button id="dlBefore" class="sub" disabled>画像保存</button></div>
-<div><h3>After</h3><div class="photo"><img id="after"><span id="afterEmpty">画像なし</span></div><button id="dlAfter" class="sub" disabled>画像保存</button></div></div>
-<button id="swap" class="sub full">左右を入れ替える</button><label>所見メモ<textarea id="memo" rows="5" placeholder="例：右肩の挙上が改善"></textarea></label><button id="saveMemo">メモ保存</button><p id="memoMsg"></p></section></main>
-<dialog id="dialog"><h2>使い方</h2><ol><li>撮影または動画を選択</li><li>止めたい場面で「静止画を追加」</li><li>必要な枚数だけ繰り返す</li><li>一覧からBefore・Afterへ設定</li></ol><button id="close">閉じる</button></dialog><script src="app.js"></script></body></html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+  <meta name="theme-color" content="#0f5132">
+  <title>分析Log v0.3</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div>
+      <small>いずみ整骨院・試作版</small>
+      <h1>分析Log <span>v0.3 α</span></h1>
+    </div>
+    <button id="help" class="sub">使い方</button>
+  </header>
+
+  <main>
+    <!-- 患者 -->
+    <section class="card">
+      <label for="patient">患者名・管理番号</label>
+      <div class="row">
+        <input id="patient" placeholder="例：患者001">
+        <button id="savePatient">保存</button>
+      </div>
+      <p id="patientMsg" class="msg"></p>
+    </section>
+
+    <!-- タブ -->
+    <nav id="tabs">
+      <button class="tab active" data-id="record">① 撮影</button>
+      <button class="tab" data-id="review">② 再生</button>
+      <button class="tab" data-id="compare">③ 比較</button>
+    </nav>
+
+    <!-- ① 撮影 -->
+    <section id="record" class="panel active card">
+      <h2>撮影</h2>
+      <p>中心線・グリッドに身体を合わせて撮影します。誰が撮っても同じ構図になります。</p>
+      <div id="recordStage" class="stage">
+        <video id="camera" autoplay muted playsinline></video>
+        <div id="recordGuides" class="guides"></div>
+        <div id="cameraMsg" class="overlay">「カメラ起動」を押してください</div>
+      </div>
+      <div class="segmented" data-target="record">
+        <span>ガイド</span>
+        <button data-grid="off">なし</button>
+        <button data-grid="center" class="on">中心線</button>
+        <button data-grid="3">3×3</button>
+        <button data-grid="5">5×5</button>
+      </div>
+      <div class="grid">
+        <button id="startCamera">カメラ起動</button>
+        <button id="switchCamera" class="sub">前後切替</button>
+        <button id="startRec" class="red" disabled>録画開始</button>
+        <button id="stopRec" class="sub" disabled>録画停止</button>
+      </div>
+      <label class="upload">端末の動画を選ぶ
+        <input id="upload" type="file" accept="video/*" capture="environment">
+      </label>
+      <p id="recordMsg" class="msg"></p>
+    </section>
+
+    <!-- ② 再生 -->
+    <section id="review" class="panel card">
+      <h2>再生・静止画切り出し</h2>
+      <div class="stage">
+        <video id="video" controls playsinline></video>
+      </div>
+      <label>再生速度
+        <select id="speed">
+          <option value=".25">0.25倍</option>
+          <option value=".5">0.5倍</option>
+          <option value=".75">0.75倍</option>
+          <option value="1" selected>1.0倍</option>
+        </select>
+      </label>
+      <div class="grid">
+        <button id="back" class="sub">◀ 1コマ戻す</button>
+        <button id="forward" class="sub">1コマ進める ▶</button>
+        <button id="captureBtn">静止画を追加</button>
+        <button id="clearShots" class="sub">一覧を空にする</button>
+      </div>
+      <canvas id="canvas" hidden></canvas>
+      <div class="shotsHead">
+        <h3>切り出した静止画</h3>
+        <span id="shotCount" class="pill">0枚</span>
+      </div>
+      <p class="hint">画像をタップすると編集画面が開きます。</p>
+      <div id="shotGallery" class="shots"></div>
+      <p id="reviewMsg" class="msg"></p>
+    </section>
+
+    <!-- ③ 比較 -->
+    <section id="compare" class="panel card">
+      <h2>Before / After</h2>
+      <p>切り出し一覧の「Before」「After」から設定できます。編集した画像はそのまま反映されます。</p>
+      <div class="compare">
+        <div>
+          <h3>Before</h3>
+          <div class="photo"><img id="before" alt="Before"><span id="beforeEmpty">画像なし</span></div>
+          <button id="dlBefore" class="sub" disabled>画像を保存</button>
+        </div>
+        <div>
+          <h3>After</h3>
+          <div class="photo"><img id="after" alt="After"><span id="afterEmpty">画像なし</span></div>
+          <button id="dlAfter" class="sub" disabled>画像を保存</button>
+        </div>
+      </div>
+      <button id="swap" class="sub full">左右を入れ替える</button>
+      <label for="memo">所見メモ
+        <textarea id="memo" rows="5" placeholder="例：右肩の挙上が改善"></textarea>
+      </label>
+      <button id="saveMemo">メモを保存</button>
+      <p id="memoMsg" class="msg"></p>
+    </section>
+  </main>
+
+  <!-- 編集モード（全画面オーバーレイ） -->
+  <div id="editor" class="editor" hidden>
+    <div class="editorBar top">
+      <button id="edClose" class="sub">戻る</button>
+      <span id="edTitle">編集</span>
+      <button id="edSave">保存</button>
+    </div>
+
+    <div id="editStage" class="editStage">
+      <div id="editImgWrap" class="editImgWrap"><img id="editImg" alt="編集中の画像"></div>
+      <div id="editGuides" class="guides"></div>
+    </div>
+
+    <div class="editorTools">
+      <div class="segmented" data-target="edit">
+        <span>グリッド</span>
+        <button data-grid="off">なし</button>
+        <button data-grid="center" class="on">中心線</button>
+        <button data-grid="3">3×3</button>
+        <button data-grid="5">5×5</button>
+      </div>
+      <div class="grid">
+        <button id="edZoomOut" class="sub">ズーム −</button>
+        <button id="edZoomIn" class="sub">ズーム ＋</button>
+        <button id="edReset" class="sub">リセット</button>
+        <button id="edToBefore">Beforeへ</button>
+        <button id="edToAfter">Afterへ</button>
+      </div>
+      <p class="hint">1本指＝画像を移動 / 2本指＝拡大縮小 / 中心線をドラッグで移動 / ダブルタップでリセット</p>
+      <p id="edMsg" class="msg"></p>
+    </div>
+  </div>
+
+  <dialog id="dialog">
+    <h2>使い方</h2>
+    <ol>
+      <li>撮影、または端末の動画を選ぶ</li>
+      <li>止めたい場面で「静止画を追加」</li>
+      <li>画像をタップして中心線・グリッドで編集</li>
+      <li>「Beforeへ」「Afterへ」で比較に反映</li>
+    </ol>
+    <button id="close" class="full">閉じる</button>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,1 +1,117 @@
-*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Yu Gothic",sans-serif;background:#f5f7f5;color:#17221b}header{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#fff;border-bottom:1px solid #d7e6dc}h1{margin:2px 0 0;font-size:24px}h1 span{font-size:13px;color:#68746d}button{border:0;border-radius:12px;padding:12px 14px;min-height:46px;background:#0f5132;color:#fff;font-weight:700}button:disabled{opacity:.45}.sub{background:#e6efe9;color:#0f5132}.red{background:#c9362b}.full{width:100%;margin:12px 0}main{width:min(900px,100%);margin:auto;padding:14px 14px 70px}.card{background:#fff;border:1px solid #d7e6dc;border-radius:18px;padding:16px;margin-bottom:12px;box-shadow:0 8px 24px rgba(14,61,37,.08)}label{display:block;font-weight:700;margin-bottom:8px}.row{display:flex;gap:8px}input,select,textarea{width:100%;border:1px solid #bdcbc2;border-radius:12px;padding:12px;font:inherit}nav{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}.tab{background:#e5ece8;color:#536159}.tab.active{background:#0f5132;color:#fff}.panel{display:none}.panel.active{display:block}.stage{position:relative;overflow:hidden;border-radius:16px;background:#111;aspect-ratio:3/4;max-height:62vh}.stage video{width:100%;height:100%;object-fit:contain}.vline,.hline{position:absolute;background:#ffed00}.vline{left:50%;top:0;width:2px;height:100%}.hline{left:0;top:50%;height:2px;width:100%}.dot{position:absolute;left:calc(50% - 6px);top:calc(50% - 6px);width:12px;height:12px;border-radius:50%;background:#ffed00;border:2px solid #111}.overlay{position:absolute;left:10px;right:10px;bottom:12px;background:rgba(0,0,0,.65);color:#fff;padding:8px;border-radius:10px;text-align:center}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:12px}.upload{margin-top:14px;padding:14px;border:1px dashed #9bb3a4;border-radius:14px;text-align:center;background:#eef8f2;color:#0f5132}.upload input{display:none}.shotsHead{display:flex;justify-content:space-between;align-items:center;margin-top:18px}.shotsHead h3{margin:0}.shots{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px}.shot{border:1px solid #d7e6dc;border-radius:14px;padding:8px;background:#f9fbfa}.shot img{width:100%;aspect-ratio:3/4;object-fit:contain;background:#111;border-radius:10px}.shot p{margin:6px 0}.shotBtns{display:grid;grid-template-columns:1fr 1fr;gap:6px}.shotBtns button{min-height:38px;padding:7px;font-size:12px}.delete{grid-column:1/-1;background:#f4e7e5;color:#a52b23}.compare{display:grid;grid-template-columns:1fr 1fr;gap:10px}.compare h3{text-align:center}.photo{aspect-ratio:3/4;background:#eef1ef;border-radius:14px;display:grid;place-items:center;overflow:hidden;margin-bottom:8px}.photo img{width:100%;height:100%;object-fit:contain;display:none}.compare button{width:100%}p{color:#657169;font-size:13px}dialog{width:min(500px,calc(100% - 28px));border:0;border-radius:18px;padding:20px}@media(min-width:700px){.stage{aspect-ratio:16/9}.grid{grid-template-columns:repeat(4,1fr)}.shots{grid-template-columns:repeat(4,1fr)}}
+/* ===== 分析Log v0.3 ===== */
+:root{
+  --green:#0f5132;
+  --green-soft:#e6efe9;
+  --line:#d7e6dc;
+  --bg:#f5f7f5;
+  --ink:#17221b;
+  --muted:#657169;
+  --red:#c9362b;
+  --guide:#ffed00;      /* 中心線（黄色） */
+  --grid:rgba(255,255,255,.55); /* 補助グリッド */
+}
+*{box-sizing:border-box}
+html,body{overscroll-behavior:none}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Yu Gothic",sans-serif;background:var(--bg);color:var(--ink)}
+
+header{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;
+  padding:14px 16px;background:#fff;border-bottom:1px solid var(--line)}
+header small{color:var(--muted)}
+h1{margin:2px 0 0;font-size:24px}
+h1 span{font-size:13px;color:var(--muted)}
+h2{margin:0 0 6px}
+h3{margin:0}
+
+button{border:0;border-radius:12px;padding:12px 14px;min-height:46px;background:var(--green);color:#fff;font-weight:700;font:inherit;font-weight:700;cursor:pointer}
+button:disabled{opacity:.45}
+.sub{background:var(--green-soft);color:var(--green)}
+.red{background:var(--red)}
+.full{width:100%;margin:12px 0 0}
+
+main{width:min(900px,100%);margin:auto;padding:14px 14px 80px}
+.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:12px;box-shadow:0 8px 24px rgba(14,61,37,.08)}
+label{display:block;font-weight:700;margin:0 0 8px}
+.row{display:flex;gap:8px}
+input,select,textarea{width:100%;border:1px solid #bdcbc2;border-radius:12px;padding:12px;font:inherit;background:#fff}
+.msg{color:var(--green);font-size:13px;min-height:18px;margin:8px 0 0}
+.hint{color:var(--muted);font-size:12px;margin:8px 0}
+p{color:var(--muted);font-size:13px}
+
+nav#tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+.tab{background:var(--green-soft);color:#536159}
+.tab.active{background:var(--green);color:#fff}
+
+.panel{display:none}
+.panel.active{display:block}
+
+/* ステージ（動画・カメラ・画像の枠） */
+.stage{position:relative;overflow:hidden;border-radius:16px;background:#111;aspect-ratio:3/4;max-height:62vh}
+.stage video{width:100%;height:100%;object-fit:contain;display:block}
+.overlay{position:absolute;left:10px;right:10px;bottom:12px;background:rgba(0,0,0,.65);color:#fff;padding:8px;border-radius:10px;text-align:center;font-size:13px}
+
+/* ガイド（中心線・グリッド）共通。JSで .guides の中に線を描画 */
+.guides{position:absolute;inset:0;pointer-events:none}
+.guides .gl{position:absolute;background:var(--grid)}
+.guides .gl.v{top:0;width:1px;height:100%}
+.guides .gl.h{left:0;height:1px;width:100%}
+.guides .center{background:var(--guide);box-shadow:0 0 0 .5px rgba(0,0,0,.35)}
+.guides .center.v{width:2px}
+.guides .center.h{height:2px}
+.guides .knob{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--guide);border:2px solid #111}
+
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:12px}
+
+.segmented{display:flex;align-items:center;gap:6px;margin-top:12px;flex-wrap:wrap}
+.segmented>span{font-weight:700;font-size:13px;color:var(--muted);margin-right:2px}
+.segmented button{flex:1;min-width:64px;min-height:40px;padding:8px;background:var(--green-soft);color:var(--green)}
+.segmented button.on{background:var(--green);color:#fff}
+
+.upload{display:block;margin-top:14px;padding:14px;border:1px dashed #9bb3a4;border-radius:14px;text-align:center;background:#eef8f2;color:var(--green);font-weight:700}
+.upload input{display:none}
+
+.shotsHead{display:flex;justify-content:space-between;align-items:center;margin-top:18px}
+.pill{background:var(--green-soft);color:var(--green);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700}
+.shots{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:6px}
+.shot{border:1px solid var(--line);border-radius:14px;padding:8px;background:#f9fbfa}
+.shot img{width:100%;aspect-ratio:3/4;object-fit:contain;background:#111;border-radius:10px;display:block;cursor:pointer}
+.shot .cap{margin:6px 0;font-size:12px;color:var(--muted)}
+.shot .edited{color:var(--green);font-weight:700}
+.shotBtns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.shotBtns button{min-height:38px;padding:7px;font-size:12px}
+.shotBtns .editBtn{grid-column:1/-1;background:var(--green)}
+.shotBtns .delete{grid-column:1/-1;background:#f4e7e5;color:#a52b23}
+
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.compare h3{text-align:center;margin-bottom:6px}
+.photo{aspect-ratio:3/4;background:#eef1ef;border-radius:14px;display:grid;place-items:center;overflow:hidden;margin-bottom:8px}
+.photo img{width:100%;height:100%;object-fit:contain;display:none}
+.compare button{width:100%}
+
+dialog{width:min(500px,calc(100% - 28px));border:0;border-radius:18px;padding:20px}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+
+/* ===== 編集モード（全画面） ===== */
+.editor{position:fixed;inset:0;z-index:20;background:#0b120e;color:#fff;display:flex;flex-direction:column}
+.editorBar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;
+  padding-top:calc(10px + env(safe-area-inset-top));background:#0f1a13;border-bottom:1px solid #24352b}
+.editorBar #edTitle{font-weight:700}
+.editStage{position:relative;flex:1;min-height:0;overflow:hidden;background:#000;touch-action:none}
+.editImgWrap{position:absolute;inset:0;display:grid;place-items:center;will-change:transform}
+.editImgWrap img{max-width:100%;max-height:100%;-webkit-user-select:none;user-select:none;pointer-events:none}
+.editStage .guides .center{cursor:grab}
+.editorTools{padding:12px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:#0f1a13;border-top:1px solid #24352b}
+.editorTools .segmented>span{color:#9db3a6}
+.editorTools .segmented button{background:#1b2a21;color:#cfe6d8}
+.editorTools .segmented button.on{background:var(--green);color:#fff}
+.editorTools .grid{grid-template-columns:repeat(3,1fr)}
+.editorTools .sub{background:#1b2a21;color:#cfe6d8}
+.editorTools .hint{color:#9db3a6}
+.editorTools .msg{color:#7fd6a3}
+
+@media(min-width:700px){
+  .stage{aspect-ratio:16/9}
+  .grid{grid-template-columns:repeat(4,1fr)}
+  .shots{grid-template-columns:repeat(4,1fr)}
+  .editorTools{max-width:900px;margin:0 auto;width:100%}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
