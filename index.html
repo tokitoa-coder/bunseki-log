@@ -35,6 +35,19 @@ button:disabled{opacity:.45}
 .sub{background:var(--green-soft);color:var(--green)}
 .red{background:var(--red)}
 .full{width:100%;margin:12px 0 0}
+.big{min-height:64px;font-size:18px}
+
+/* 全画面カメラ */
+.camView{position:fixed;inset:0;z-index:20;background:#000;display:flex;flex-direction:column;color:#fff}
+.camView[hidden]{display:none}
+.camStage{position:relative;flex:1;min-height:0;overflow:hidden;background:#000}
+.camStage video{width:100%;height:100%;object-fit:contain;display:block}
+.camTools{padding:12px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:#0f1a13;border-top:1px solid #24352b}
+.camTools .segmented>span{color:#9db3a6}
+.camTools .segmented button{background:#1b2a21;color:#cfe6d8}
+.camTools .segmented button.on{background:var(--green);color:#fff}
+.camTools .sub{background:#1b2a21;color:#cfe6d8}
+.camTools #levelToggle.on{background:var(--green);color:#fff}
 
 main{width:min(900px,100%);margin:auto;padding:14px 14px 80px}
 .card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:12px;box-shadow:0 8px 24px rgba(14,61,37,.08)}
@@ -140,7 +153,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.3 α (r8)</span></h1>
+      <h1>分析Log <span>v0.3 α (r9)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -166,27 +179,8 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     <!-- ① 撮影 -->
     <section id="record" class="panel active card">
       <h2>撮影</h2>
-      <p>中心線・グリッドに身体を合わせて撮影します。誰が撮っても同じ構図になります。</p>
-      <div id="recordStage" class="stage">
-        <video id="camera" autoplay muted playsinline></video>
-        <div id="recordGuides" class="guides"></div>
-        <div id="cameraMsg" class="overlay">「カメラ起動」を押してください</div>
-      </div>
-      <div class="segmented" data-target="record">
-        <span>ガイド</span>
-        <button data-grid="off">なし</button>
-        <button data-grid="center" class="on">中心線</button>
-        <button data-grid="3">3×3</button>
-        <button data-grid="5">5×5</button>
-        <button data-grid="8">8×8</button>
-      </div>
-      <button id="levelToggle" class="sub full">水平器：OFF</button>
-      <div class="grid">
-        <button id="startCamera">カメラ起動</button>
-        <button id="switchCamera" class="sub">前後切替</button>
-        <button id="startRec" class="red" disabled>録画開始</button>
-        <button id="stopRec" class="sub" disabled>録画停止</button>
-      </div>
+      <p>「カメラ起動」を押すと全画面カメラになります。中心線・グリッド・水平器に身体を合わせて撮影してください。</p>
+      <button id="startCamera" class="full big">📷 カメラ起動（全画面）</button>
       <label class="upload">端末の動画を選ぶ
         <input id="upload" type="file" accept="video/*" capture="environment">
       </label>
@@ -251,6 +245,35 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <button id="clearShots" class="sub full">一覧を空にする</button>
     </section>
   </main>
+
+  <!-- 全画面カメラ -->
+  <div id="camView" class="camView" hidden>
+    <div class="editorBar top">
+      <button id="camClose" class="sub">閉じる</button>
+      <span id="camTitle">撮影</span>
+      <button id="switchCamera" class="sub">前後</button>
+    </div>
+    <div id="camStage" class="camStage">
+      <video id="camera" autoplay muted playsinline></video>
+      <div id="recordGuides" class="guides"></div>
+      <div id="cameraMsg" class="overlay">準備中…</div>
+    </div>
+    <div class="camTools">
+      <div class="segmented" data-target="record">
+        <span>ガイド</span>
+        <button data-grid="off">なし</button>
+        <button data-grid="center" class="on">中心線</button>
+        <button data-grid="3">3×3</button>
+        <button data-grid="5">5×5</button>
+        <button data-grid="8">8×8</button>
+      </div>
+      <button id="levelToggle" class="sub full">水平器：OFF</button>
+      <div class="grid">
+        <button id="startRec" class="red">● 録画開始</button>
+        <button id="stopRec" class="sub" disabled>■ 録画停止</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 編集モード（全画面オーバーレイ） -->
   <div id="editor" class="editor" hidden>
@@ -447,17 +470,25 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
      ① 撮影・録画
      =======================================================*/
   async function stopStream() { if (s.stream) s.stream.getTracks().forEach((t) => t.stop()); }
+  function openCamView() { $("camView").hidden = false; document.body.style.overflow = "hidden"; drawRecordGuides(); }
+  function closeCamView() { $("camView").hidden = true; document.body.style.overflow = ""; }
   async function startCamera() {
     try {
       await stopStream();
       s.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: s.facing } }, audio: true });
       $("camera").srcObject = s.stream;
-      $("startRec").disabled = false;
-      $("cameraMsg").textContent = "中心線・グリッドに身体を合わせてください";
+      $("startRec").disabled = false; $("stopRec").disabled = true;
+      $("cameraMsg").textContent = "中心線・グリッド・水平器に身体を合わせてください";
+      setTimeout(() => { $("cameraMsg").textContent = ""; }, 2500);
+      openCamView();
     } catch (e) { toast("recordMsg", "カメラを起動できません：" + e.message); }
   }
   $("startCamera").onclick = startCamera;
   $("switchCamera").onclick = async () => { s.facing = s.facing === "environment" ? "user" : "environment"; await startCamera(); };
+  $("camClose").onclick = async () => {
+    if (s.rec && s.rec.state === "recording") s.rec.stop();
+    await stopStream(); closeCamView();
+  };
 
   function loadVideo(blob) {
     if (s.url) URL.revokeObjectURL(s.url);
@@ -469,14 +500,15 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     s.chunks = [];
     s.rec = new MediaRecorder(s.stream);
     s.rec.ondataavailable = (e) => e.data.size && s.chunks.push(e.data);
-    s.rec.onstop = () => { loadVideo(new Blob(s.chunks, { type: s.rec.mimeType || "video/webm" })); openTab("review"); };
+    s.rec.onstop = () => { loadVideo(new Blob(s.chunks, { type: s.rec.mimeType || "video/webm" })); closeCamView(); openTab("review"); };
     s.rec.start();
     $("startRec").disabled = true; $("stopRec").disabled = false;
     $("cameraMsg").textContent = "● 録画中";
   };
   $("stopRec").onclick = () => {
-    if (s.rec && s.rec.state === "recording") s.rec.stop();
+    if (s.rec && s.rec.state === "recording") s.rec.stop();   // onstopで再生画面へ移動
     $("startRec").disabled = false; $("stopRec").disabled = true;
+    $("cameraMsg").textContent = "";
   };
   $("upload").onchange = (e) => { if (e.target.files[0]) { loadVideo(e.target.files[0]); openTab("review"); } };
 
