@@ -1,73 +1,18 @@
 <!doctype html>
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>分析Log v0.1</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-<header><div><small>いずみ整骨院・試作版</small><h1>分析Log <span>v0.1 α</span></h1></div><button id="help">使い方</button></header>
-<main>
-<section class="card">
-<label>患者名・管理番号</label>
-<div class="row"><input id="patient" placeholder="例：患者001"><button id="savePatient">保存</button></div>
-<p id="patientMsg"></p>
-</section>
-
-<nav>
-<button class="tab active" data-id="record">① 撮影</button>
-<button class="tab" data-id="review">② 再生</button>
-<button class="tab" data-id="compare">③ 比較</button>
-</nav>
-
-<section id="record" class="panel active card">
-<h2>撮影</h2>
-<p>縦線と横線の中心に身体を合わせて撮影します。</p>
-<div class="stage">
-<video id="camera" autoplay muted playsinline></video>
-<div class="vline"></div><div class="hline"></div><div class="dot"></div>
-<div id="cameraMsg" class="overlay">「カメラ起動」を押してください</div>
-</div>
-<div class="grid">
-<button id="startCamera">カメラ起動</button>
-<button id="switchCamera" class="sub">前後切替</button>
-<button id="startRec" class="red" disabled>録画開始</button>
-<button id="stopRec" class="sub" disabled>録画停止</button>
-</div>
-<label class="upload">端末の動画を選ぶ<input id="upload" type="file" accept="video/*" capture="environment"></label>
-<p id="recordMsg"></p>
-</section>
-
-<section id="review" class="panel card">
-<h2>再生・スロー・静止画切り出し</h2>
-<div class="stage"><video id="video" controls playsinline></video></div>
-<label>再生速度
-<select id="speed"><option value=".25">0.25倍</option><option value=".5">0.5倍</option><option value=".75">0.75倍</option><option value="1" selected>1.0倍</option></select>
-</label>
-<div class="grid">
-<button id="back" class="sub">◀ 1コマ戻す</button>
-<button id="forward" class="sub">1コマ進める ▶</button>
-<button id="beforeBtn">Beforeに保存</button>
-<button id="afterBtn">Afterに保存</button>
-</div>
-<canvas id="canvas" hidden></canvas>
-<p id="reviewMsg"></p>
-</section>
-
-<section id="compare" class="panel card">
-<h2>Before / After</h2>
-<div class="compare">
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>分析Log v0.2</title><link rel="stylesheet" href="style.css"></head>
+<body><header><div><small>いずみ整骨院・試作版</small><h1>分析Log <span>v0.2 α</span></h1></div><button id="help">使い方</button></header>
+<main><section class="card"><label>患者名・管理番号</label><div class="row"><input id="patient" placeholder="例：患者001"><button id="savePatient">保存</button></div><p id="patientMsg"></p></section>
+<nav><button class="tab active" data-id="record">① 撮影</button><button class="tab" data-id="review">② 再生</button><button class="tab" data-id="compare">③ 比較</button></nav>
+<section id="record" class="panel active card"><h2>撮影</h2><p>縦線と横線の中心に身体を合わせて撮影します。</p>
+<div class="stage"><video id="camera" autoplay muted playsinline></video><div class="vline"></div><div class="hline"></div><div class="dot"></div><div id="cameraMsg" class="overlay">「カメラ起動」を押してください</div></div>
+<div class="grid"><button id="startCamera">カメラ起動</button><button id="switchCamera" class="sub">前後切替</button><button id="startRec" class="red" disabled>録画開始</button><button id="stopRec" class="sub" disabled>録画停止</button></div>
+<label class="upload">端末の動画を選ぶ<input id="upload" type="file" accept="video/*" capture="environment"></label><p id="recordMsg"></p></section>
+<section id="review" class="panel card"><h2>再生・静止画切り出し</h2><div class="stage"><video id="video" controls playsinline></video></div>
+<label>再生速度<select id="speed"><option value=".25">0.25倍</option><option value=".5">0.5倍</option><option value=".75">0.75倍</option><option value="1" selected>1.0倍</option></select></label>
+<div class="grid"><button id="back" class="sub">◀ 1コマ戻す</button><button id="forward" class="sub">1コマ進める ▶</button><button id="captureBtn">静止画を追加</button><button id="clearShots" class="sub">一覧を空にする</button></div>
+<canvas id="canvas" hidden></canvas><div class="shotsHead"><h3>この動画から切り出した静止画</h3><span id="shotCount">0枚</span></div><div id="shotGallery" class="shots"></div><p id="reviewMsg"></p></section>
+<section id="compare" class="panel card"><h2>Before / After</h2><p>切り出し一覧からBefore・Afterへ設定できます。</p><div class="compare">
 <div><h3>Before</h3><div class="photo"><img id="before"><span id="beforeEmpty">画像なし</span></div><button id="dlBefore" class="sub" disabled>画像保存</button></div>
-<div><h3>After</h3><div class="photo"><img id="after"><span id="afterEmpty">画像なし</span></div><button id="dlAfter" class="sub" disabled>画像保存</button></div>
-</div>
-<button id="swap" class="sub full">左右を入れ替える</button>
-<label>所見メモ<textarea id="memo" rows="5" placeholder="例：右肩の挙上、体幹の左傾きが改善"></textarea></label>
-<button id="saveMemo">メモ保存</button><p id="memoMsg"></p>
-</section>
-</main>
-
-<dialog id="dialog"><h2>使い方</h2><ol><li>患者名または管理番号を入力</li><li>撮影または動画を選択</li><li>スローやコマ送りで確認</li><li>Before・Afterへ静止画保存</li><li>比較して所見を記録</li></ol><p>試作版のため、実名ではなく管理番号でテストしてください。</p><button id="close">閉じる</button></dialog>
-<script src="app.js"></script>
-</body>
-</html>
+<div><h3>After</h3><div class="photo"><img id="after"><span id="afterEmpty">画像なし</span></div><button id="dlAfter" class="sub" disabled>画像保存</button></div></div>
+<button id="swap" class="sub full">左右を入れ替える</button><label>所見メモ<textarea id="memo" rows="5" placeholder="例：右肩の挙上が改善"></textarea></label><button id="saveMemo">メモ保存</button><p id="memoMsg"></p></section></main>
+<dialog id="dialog"><h2>使い方</h2><ol><li>撮影または動画を選択</li><li>止めたい場面で「静止画を追加」</li><li>必要な枚数だけ繰り返す</li><li>一覧からBefore・Afterへ設定</li></ol><button id="close">閉じる</button></dialog><script src="app.js"></script></body></html>
