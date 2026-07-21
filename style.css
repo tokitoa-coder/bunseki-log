@@ -92,7 +92,6 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 
 /* ===== 編集モード（全画面） ===== */
 .editor{position:fixed;inset:0;z-index:20;background:#0b120e;color:#fff;display:flex;flex-direction:column}
-.editor[hidden]{display:none}   /* 非表示のときは必ず隠す（display:flexより優先させる） */
 .editorBar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;
   padding-top:calc(10px + env(safe-area-inset-top));background:#0f1a13;border-bottom:1px solid #24352b}
 .editorBar #edTitle{font-weight:700}
@@ -116,3 +115,6 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   .editorTools{max-width:900px;margin:0 auto;width:100%}
 }
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+
+/* Fix: hidden editor must actually be removed from layout */
+.editor[hidden]{display:none !important;}

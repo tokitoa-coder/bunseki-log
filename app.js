@@ -305,7 +305,8 @@
 
   // ---- 現在の見た目をcanvasへ焼き込み（保存・反映で使用） ----
   function bake() {
-    return new Promise((resolve) => {
+    if (!ed.shot || !ed.shot.data) return Promise.reject(new Error("編集する画像がありません"));
+    return new Promise((resolve, reject) => {
       const r = editStage.getBoundingClientRect();
       const W = r.width, H = r.height, dpr = Math.min(window.devicePixelRatio || 1, 3);
       const c = document.createElement("canvas"); c.width = W * dpr; c.height = H * dpr;
@@ -324,6 +325,7 @@
         drawGuidesOnCanvas(x, W, H);
         resolve(c.toDataURL("image/jpeg", 0.85));
       };
+      img.onerror = () => reject(new Error("画像を読み込めませんでした"));
       img.src = ed.shot.data;
     });
   }
@@ -343,14 +345,21 @@
     ed.shot.edit = { grid: ed.mode, vx: ed.vx, hy: ed.hy, tx: ed.tx, ty: ed.ty, scale: ed.scale };
     saveShots(); renderShots();
   }
-  $("edSave").onclick = async () => { commitEdit(await bake()); toast("edMsg", "保存しました"); };
+  $("edSave").onclick = async () => {
+    try { commitEdit(await bake()); toast("edMsg", "保存しました"); }
+    catch (e) { toast("edMsg", e.message); }
+  };
   $("edToBefore").onclick = async () => {
-    const d = await bake(); commitEdit(d);
-    s.before = d; localStorage.al_before = d; updateCompare(); toast("edMsg", "Beforeに反映しました");
+    try {
+      const d = await bake(); commitEdit(d);
+      s.before = d; localStorage.al_before = d; updateCompare(); toast("edMsg", "Beforeに反映しました");
+    } catch (e) { toast("edMsg", e.message); }
   };
   $("edToAfter").onclick = async () => {
-    const d = await bake(); commitEdit(d);
-    s.after = d; localStorage.al_after = d; updateCompare(); toast("edMsg", "Afterに反映しました");
+    try {
+      const d = await bake(); commitEdit(d);
+      s.after = d; localStorage.al_after = d; updateCompare(); toast("edMsg", "Afterに反映しました");
+    } catch (e) { toast("edMsg", e.message); }
   };
 
   /* ---- ダイアログ・初期化 ---- */
