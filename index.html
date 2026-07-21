@@ -63,6 +63,30 @@ button:disabled{opacity:.45}
 .compareView{position:fixed;inset:0;z-index:20;background:#0b120e;display:flex;flex-direction:column;color:#fff}
 .compareView[hidden]{display:none}
 .compareFS{flex:1;min-height:0;display:flex;gap:6px;padding:8px}
+.compareFS[hidden],.ovStage[hidden],.swStage[hidden]{display:none}
+.cmpBody{flex:1;min-height:0;position:relative;display:flex}
+.cmpBody>[data-view]{flex:1;min-height:0}
+
+/* 重ね（透過） */
+.ovStage{position:relative;background:#000;margin:8px;border-radius:10px;overflow:hidden}
+.ovStage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#ovAfter{opacity:.5}
+.ovCtrl{display:flex;align-items:center;gap:10px;margin-bottom:8px;color:#cfe6d8;font-weight:700;font-size:13px}
+#ovSlider{-webkit-appearance:none;appearance:none;flex:1;height:34px;background:transparent}
+#ovSlider::-webkit-slider-runnable-track{height:6px;border-radius:6px;background:#2b3d33}
+#ovSlider::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;margin-top:-11px;border-radius:50%;background:var(--green);border:3px solid #fff}
+#ovSlider::-moz-range-thumb{width:28px;height:28px;border-radius:50%;background:var(--green);border:3px solid #fff}
+
+/* スライダー比較 */
+.swStage{position:relative;background:#000;margin:8px;border-radius:10px;overflow:hidden;touch-action:none}
+.swStage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#swAfter{clip-path:inset(0 50% 0 0)}
+.swHandle{position:absolute;top:0;bottom:0;left:50%;width:3px;background:#fff;transform:translateX(-50%);box-shadow:0 0 0 1px rgba(0,0,0,.4)}
+.swHandle span{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;color:var(--green);font-weight:900;border-radius:999px;width:36px;height:36px;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.swTag{position:absolute;top:8px;padding:2px 8px;border-radius:8px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;font-weight:700}
+.swTagL{left:8px}
+.swTagR{right:8px}
+.cmpCtrl{padding:10px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:#0f1a13;border-top:1px solid #24352b}
 .compareFS figure{flex:1;min-width:0;margin:0;display:flex;flex-direction:column}
 .compareFS figcaption{text-align:center;font-weight:700;padding:4px;font-size:13px;color:#cfe6d8}
 .compareFS figcaption span{color:#7fd6a3;font-size:12px}
@@ -175,7 +199,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.3 α (r10)</span></h1>
+      <h1>分析Log <span>v0.3 β (r11)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -303,17 +327,46 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <span>Before / After</span>
       <button id="compareSwap" class="sub">入替</button>
     </div>
-    <div class="compareFS">
-      <figure>
-        <figcaption>Before <span id="beforeCapFS"></span></figcaption>
-        <div class="fsImg"><img id="beforeFS" alt="Before"><span id="beforeFSEmpty">画像なし</span></div>
-      </figure>
-      <figure>
-        <figcaption>After <span id="afterCapFS"></span></figcaption>
-        <div class="fsImg"><img id="afterFS" alt="After"><span id="afterFSEmpty">画像なし</span></div>
-      </figure>
+    <div class="segmented" data-target="cmp">
+      <span>表示</span>
+      <button data-cmp="side" class="on">横並び</button>
+      <button data-cmp="overlay">重ね</button>
+      <button data-cmp="slider">スライダー</button>
     </div>
-    <p class="hint fsHint">横向きにすると大きく見られます</p>
+    <div class="cmpBody">
+      <!-- 横並び -->
+      <div class="compareFS" data-view="side">
+        <figure>
+          <figcaption>Before <span id="beforeCapFS"></span></figcaption>
+          <div class="fsImg"><img id="beforeFS" alt="Before"><span id="beforeFSEmpty">画像なし</span></div>
+        </figure>
+        <figure>
+          <figcaption>After <span id="afterCapFS"></span></figcaption>
+          <div class="fsImg"><img id="afterFS" alt="After"><span id="afterFSEmpty">画像なし</span></div>
+        </figure>
+      </div>
+      <!-- 重ね（透過） -->
+      <div class="ovStage" data-view="overlay" hidden>
+        <img id="ovBefore" alt="Before">
+        <img id="ovAfter" alt="After">
+      </div>
+      <!-- スライダー -->
+      <div id="swStage" class="swStage" data-view="slider" hidden>
+        <img id="swBefore" alt="Before">
+        <img id="swAfter" alt="After">
+        <div id="swHandle" class="swHandle"><span>‹ ›</span></div>
+        <span class="swTag swTagL">Before</span>
+        <span class="swTag swTagR">After</span>
+      </div>
+    </div>
+    <div class="cmpCtrl">
+      <div id="ovCtrl" class="ovCtrl" hidden>
+        <span>Before</span>
+        <input id="ovSlider" type="range" min="0" max="100" value="50">
+        <span>After</span>
+      </div>
+      <p class="hint fsHint" id="cmpHint">横並び以外は、撮影の構図がそろっているほどきれいに重なります</p>
+    </div>
   </div>
 
   <!-- 全画面カメラ -->
@@ -478,7 +531,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   }
   function setSegmented(target, mode) {
     document.querySelectorAll(`.segmented[data-target="${target}"] button`)
-      .forEach((b) => b.classList.toggle("on", b.dataset.grid === mode));
+      .forEach((b) => b.classList.toggle("on", (b.dataset.grid ?? b.dataset.m ?? b.dataset.cmp) === mode));
   }
 
   // ---- 撮影ガイドの切替 ----
@@ -690,11 +743,39 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       else { imFS.style.display = "none"; emptyFS.style.display = "block"; capFS.textContent = ""; }
     }
   }
-  function updateCompare() { showImage("before"); showImage("after"); }
-  // 全画面比較の開閉
+  function updateCompare() {
+    showImage("before"); showImage("after");
+    const b = s.before && s.before.img, a = s.after && s.after.img;
+    // 重ね・スライダー用の画像も同期
+    [["ovBefore", b], ["swBefore", b], ["ovAfter", a], ["swAfter", a]].forEach(([id, src]) => {
+      const el = $(id); if (el) { el.src = src || ""; el.style.display = src ? "block" : "none"; }
+    });
+  }
+  // 全画面比較の開閉とモード切替
+  let cmpMode = "side", swPos = 50;
+  function setCmpMode(m) {
+    cmpMode = m; setSegmented("cmp", m);
+    document.querySelectorAll(".cmpBody > [data-view]").forEach((el) => { el.hidden = el.dataset.view !== m; });
+    $("ovCtrl").hidden = m !== "overlay";
+    if (m === "overlay") applyOverlay();
+    if (m === "slider") applySlider();
+  }
+  function applyOverlay() { $("ovAfter").style.opacity = ($("ovSlider").value / 100); }
+  function applySlider() { $("swAfter").style.clipPath = `inset(0 ${100 - swPos}% 0 0)`; $("swHandle").style.left = swPos + "%"; }
+  $("ovSlider").oninput = applyOverlay;
+  document.querySelectorAll('.segmented[data-target="cmp"] button').forEach((b) => { b.onclick = () => setCmpMode(b.dataset.cmp); });
+  // スライダーの仕切りをドラッグ
+  const swStage = $("swStage");
+  let swDrag = false;
+  const swFromEvent = (e) => { const r = swStage.getBoundingClientRect(); swPos = clamp(((e.clientX - r.left) / r.width) * 100, 0, 100); applySlider(); };
+  swStage.addEventListener("pointerdown", (e) => { swStage.setPointerCapture(e.pointerId); swDrag = true; swFromEvent(e); });
+  swStage.addEventListener("pointermove", (e) => { if (swDrag) swFromEvent(e); });
+  swStage.addEventListener("pointerup", () => { swDrag = false; });
+  swStage.addEventListener("pointercancel", () => { swDrag = false; });
+
   $("openCompareFS").onclick = () => {
     if (!(s.before && s.before.img) && !(s.after && s.after.img)) return toast("memoMsg", "先にBefore/Afterを設定してください");
-    updateCompare(); $("compareView").hidden = false; document.body.style.overflow = "hidden";
+    updateCompare(); setCmpMode(cmpMode); $("compareView").hidden = false; document.body.style.overflow = "hidden";
   };
   $("compareClose").onclick = () => { $("compareView").hidden = true; document.body.style.overflow = ""; };
   $("compareSwap").onclick = () => { [s.before, s.after] = [s.after, s.before]; saveSlot("before"); saveSlot("after"); updateCompare(); };
