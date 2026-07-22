@@ -218,7 +218,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.7 β (r19)</span></h1>
+      <h1>分析Log <span>v0.7 β (r20)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -228,8 +228,13 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     <section class="card">
       <label for="patient">患者名・管理番号</label>
       <div class="row">
-        <input id="patient" placeholder="例：患者001">
+        <input id="patient" list="patientList" placeholder="例：患者001" autocomplete="off">
         <button id="savePatient">保存</button>
+      </div>
+      <datalist id="patientList"></datalist>
+      <div class="grid">
+        <button id="renamePatient" class="sub">名前を変更</button>
+        <button id="deletePatient" class="sub">名前を削除</button>
       </div>
       <p id="patientMsg" class="msg"></p>
     </section>
@@ -587,6 +592,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       useIDB = false;                          // 使えない端末では従来どおり
       s.shots = JSON.parse(localStorage.al_shots || "[]");
     }
+    s.shots.forEach((sh) => { if (sh.patient) addPatient(sh.patient); });   // 既存の名前を名簿に取り込む
     renderShots();
   }
 
@@ -598,8 +604,65 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => openTab(b.dataset.id)));
 
   // ---- 患者名 ----
+  // ---- 患者名（名簿・変更・削除） ----
   $("patient").value = localStorage.al_patient || "";
-  $("savePatient").onclick = () => { localStorage.al_patient = $("patient").value; toast("patientMsg", "保存しました"); };
+  let patients = [];
+  try { patients = JSON.parse(localStorage.al_patients || "[]"); } catch (e) { patients = []; }
+  const savePatients = () => { localStorage.al_patients = JSON.stringify(patients); };
+  function renderPatientList() {
+    const dl = $("patientList");
+    dl.innerHTML = "";
+    patients.filter(Boolean).sort().forEach((n) => { const o = document.createElement("option"); o.value = n; dl.appendChild(o); });
+  }
+  function addPatient(name) {
+    const n = (name || "").trim();
+    if (n && !patients.includes(n)) { patients.push(n); savePatients(); renderPatientList(); }
+  }
+  $("savePatient").onclick = () => {
+    const n = $("patient").value.trim();
+    localStorage.al_patient = n;
+    addPatient(n);
+    renderShots();
+    toast("patientMsg", n ? `「${n}」を保存しました` : "名前を空にしました");
+  };
+  // 名前を変更：この患者の静止画すべての名前を付け替える
+  $("renamePatient").onclick = () => {
+    const old = $("patient").value.trim();
+    if (!old) return toast("patientMsg", "先に変更したい名前を入力または選択してください");
+    const neo = (prompt(`「${old}」を何に変更しますか？`, old) || "").trim();
+    if (!neo || neo === old) return;
+    let n = 0;
+    s.shots.forEach((sh) => { if ((sh.patient || "") === old) { sh.patient = neo; saveShot(sh); n++; } });
+    patients = patients.filter((p) => p !== old);
+    if (!patients.includes(neo)) patients.push(neo);
+    savePatients(); renderPatientList();
+    $("patient").value = neo; localStorage.al_patient = neo;
+    renderShots();
+    toast("patientMsg", `「${neo}」に変更しました（静止画 ${n}枚も変更）`);
+  };
+  // 名前を削除：名簿から消す。画像を消すかは別途たずねる
+  $("deletePatient").onclick = () => {
+    const name = $("patient").value.trim();
+    if (!name) return toast("patientMsg", "削除したい名前を入力または選択してください");
+    const mine = s.shots.filter((sh) => (sh.patient || "") === name);
+    if (!confirm(`「${name}」を名簿から削除します。よろしいですか？`)) return;
+    patients = patients.filter((p) => p !== name);
+    savePatients(); renderPatientList();
+    if (mine.length && confirm(`この患者の静止画 ${mine.length}枚も削除しますか？
+
+OK＝画像も削除する
+キャンセル＝画像は残す`)) {
+      const ids = new Set(mine.map((x) => x.id));
+      s.shots = s.shots.filter((x) => !ids.has(x.id));
+      if (useIDB) ids.forEach((id) => IDB.del(id).catch(() => {})); else saveShotsLS();
+      toast("patientMsg", `「${name}」と静止画 ${mine.length}枚を削除しました`);
+    } else {
+      toast("patientMsg", `「${name}」を名簿から削除しました（静止画は残しています）`);
+    }
+    $("patient").value = ""; localStorage.al_patient = "";
+    renderShots();
+  };
+  renderPatientList();
 
   /* =======================================================
      ガイド描画（撮影・編集で共用）
@@ -815,6 +878,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         `<button data-a="before">Before</button>` +
         `<button data-a="after">After</button>` +
         `<button data-a="download" class="sub">保存</button>` +
+        `<button data-a="rename" class="sub">名前</button>` +
         `<button data-a="delete" class="delete">削除</button>` +
         `</div>`;
       d.querySelector("img").onclick = () => openEditor(shot);
@@ -828,6 +892,10 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     else if (a === "before") { s.before = slot; saveSlot("before"); updateCompare(); }
     else if (a === "after") { s.after = slot; saveSlot("after"); updateCompare(); }
     else if (a === "download") download(slot.img, "shot");
+    else if (a === "rename") {
+      const neo = prompt("この画像の患者名を変更", shot.patient || "");
+      if (neo !== null) { shot.patient = neo.trim(); saveShot(shot); addPatient(shot.patient); renderShots(); }
+    }
     else if (a === "delete") { s.shots = s.shots.filter((y) => y.id !== shot.id); if (useIDB) IDB.del(shot.id).catch(() => {}); else saveShotsLS(); renderShots(); }
   }
 
