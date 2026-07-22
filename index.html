@@ -212,13 +212,51 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 }
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 
+/* ===== レポート（印刷・PDF） ===== */
+.reportView{position:fixed;inset:0;z-index:22;background:#3a423d;display:flex;flex-direction:column}
+.reportView[hidden]{display:none}
+.reportScroll{flex:1;min-height:0;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch}
+.reportPage{width:min(760px,100%);margin:0 auto;background:#fff;color:#111;border-radius:8px;padding:22px 24px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.rHead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:2px solid var(--green);padding-bottom:10px;margin-bottom:16px}
+.rClinic{font-size:13px;color:#555;font-weight:700}
+.rHead h1{font-size:21px;margin:2px 0 0;color:var(--green)}
+.rMeta{font-size:13px;text-align:right;line-height:1.9;color:#333}
+.rImgs{display:flex;gap:14px}
+.rImgs figure{flex:1;min-width:0;margin:0}
+.rImgs figcaption{font-weight:700;font-size:13px;margin-bottom:5px;color:#111}
+.rImgs figcaption span{color:#666;font-weight:400;font-size:11px}
+.rBox{position:relative;background:#f0f2f0;border:1px solid #ddd;border-radius:6px;display:grid;place-items:center;overflow:hidden;aspect-ratio:3/4}
+.rBox img{width:100%;height:100%;object-fit:contain;display:none}
+.rBox span{color:#999;font-size:12px}
+.rSec{margin-top:16px}
+.rSec h2{font-size:14px;color:var(--green);border-left:4px solid var(--green);padding-left:8px;margin:0 0 8px}
+.rCols{display:flex;gap:14px}
+.rCols>div{flex:1;min-width:0}
+.rCols h3{font-size:12px;margin:0 0 4px;color:#444}
+.rAi{font-size:12px;line-height:1.8;color:#222;background:#f6f8f6;border:1px solid #e2e8e4;border-radius:6px;padding:8px 10px;min-height:40px}
+.rAi b{color:var(--green)}
+.rAi .note,.rAi .warn{display:block;color:#777;font-size:10px;margin-top:4px}
+.rMemo{font-size:13px;line-height:1.9;color:#222;white-space:pre-wrap;border:1px solid #e2e8e4;border-radius:6px;padding:10px;min-height:60px;margin:0}
+.rFoot{margin-top:16px;padding-top:8px;border-top:1px solid #ddd;font-size:10px;color:#888;text-align:center}
+.bkHead{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+
+@media print{
+  body>*:not(#reportView){display:none!important}
+  .noprint{display:none!important}
+  .reportView{position:static!important;display:block!important;background:#fff}
+  .reportScroll{overflow:visible!important;padding:0!important}
+  .reportPage{width:100%!important;box-shadow:none!important;border-radius:0!important;padding:0!important}
+  .rBox{aspect-ratio:auto;height:78mm}
+  @page{margin:12mm}
+}
+
 </style>
 </head>
 <body>
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.7 β (r20)</span></h1>
+      <h1>分析Log <span>v0.8 β (r21)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -302,6 +340,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       </div>
       <button id="swap" class="sub full">左右を入れ替える</button>
       <button id="openCompareFS" class="full big">⛶ 全画面で比較する</button>
+      <button id="openReport" class="full big">📄 レポートを作る（印刷・PDF）</button>
       <label for="memo">所見メモ
         <textarea id="memo" rows="5" placeholder="例：右肩の挙上が改善"></textarea>
       </label>
@@ -316,6 +355,14 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <label class="filterRow"><input type="checkbox" id="filterPatient"> 上の患者名と一致するものだけ表示</label>
       <div id="shotGallery" class="shots"></div>
       <button id="clearShots" class="sub full">一覧を空にする</button>
+
+      <h3 class="bkHead">バックアップ</h3>
+      <p>すべての静止画・設定をファイルに書き出せます。端末を替えるときや、消えてしまう前の保険にお使いください。</p>
+      <button id="exportAll" class="full">💾 ファイルに書き出す</button>
+      <label class="upload">📂 ファイルから読み込む
+        <input id="importAll" type="file" accept="application/json,.json">
+      </label>
+      <p id="backupMsg" class="msg"></p>
     </section>
   </main>
 
@@ -342,6 +389,51 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       </div>
       <button id="capture2" class="full big">■ この場面を切り出し</button>
       <p id="play2Msg" class="msg"></p>
+    </div>
+  </div>
+
+  <!-- レポート（印刷・PDF） -->
+  <div id="reportView" class="reportView" hidden>
+    <div class="editorBar top noprint">
+      <button id="reportClose" class="sub">閉じる</button>
+      <button id="editClinic" class="sub">院名</button>
+      <button id="reportPrint">印刷 / PDF</button>
+    </div>
+    <div class="reportScroll">
+      <div class="reportPage">
+        <header class="rHead">
+          <div>
+            <div class="rClinic" id="rClinic">いずみ整骨院</div>
+            <h1>姿勢分析レポート</h1>
+          </div>
+          <div class="rMeta">
+            <div>患者名：<b id="rPatient">—</b></div>
+            <div>作成日：<span id="rDate"></span></div>
+          </div>
+        </header>
+        <section class="rImgs">
+          <figure>
+            <figcaption>Before <span id="rBeforeDate"></span></figcaption>
+            <div class="rBox"><img id="rBefore" alt=""><span id="rBeforeNone">画像なし</span></div>
+          </figure>
+          <figure>
+            <figcaption>After <span id="rAfterDate"></span></figcaption>
+            <div class="rBox"><img id="rAfter" alt=""><span id="rAfterNone">画像なし</span></div>
+          </figure>
+        </section>
+        <section class="rSec" id="rAiSec">
+          <h2>姿勢の計測結果</h2>
+          <div class="rCols">
+            <div><h3>Before</h3><div class="rAi" id="rBeforeAi">—</div></div>
+            <div><h3>After</h3><div class="rAi" id="rAfterAi">—</div></div>
+          </div>
+        </section>
+        <section class="rSec">
+          <h2>所見・コメント</h2>
+          <p class="rMemo" id="rMemo">—</p>
+        </section>
+        <footer class="rFoot">分析Log で作成／計測値はAIによる推定を含みます</footer>
+      </div>
     </div>
   </div>
 
@@ -887,7 +979,7 @@ OK＝画像も削除する
     });
   }
   function shotAction(a, shot) {
-    const slot = { img: shot.edited || shot.data, date: shot.date, time: shot.time };
+    const slot = { img: shot.edited || shot.data, date: shot.date, time: shot.time, ai: shot.aiText || null, patient: shot.patient || '' };
     if (a === "edit") openEditor(shot);
     else if (a === "before") { s.before = slot; saveSlot("before"); updateCompare(); }
     else if (a === "after") { s.after = slot; saveSlot("after"); updateCompare(); }
@@ -1463,13 +1555,95 @@ OK＝画像も削除する
   $("edSave").onclick = async () => { commitEdit(await bake()); toast("edMsg", "保存しました"); };
   $("edToBefore").onclick = async () => {
     const d = await bake(); commitEdit(d);
-    s.before = { img: d, date: ed.shot.date, time: ed.shot.time }; saveSlot("before"); updateCompare();
+    s.before = { img: d, date: ed.shot.date, time: ed.shot.time, ai: ed.shot.aiText || null, patient: ed.shot.patient || '' }; saveSlot("before"); updateCompare();
     toast("edMsg", "Beforeに反映しました");
   };
   $("edToAfter").onclick = async () => {
     const d = await bake(); commitEdit(d);
-    s.after = { img: d, date: ed.shot.date, time: ed.shot.time }; saveSlot("after"); updateCompare();
+    s.after = { img: d, date: ed.shot.date, time: ed.shot.time, ai: ed.shot.aiText || null, patient: ed.shot.patient || '' }; saveSlot("after"); updateCompare();
     toast("edMsg", "Afterに反映しました");
+  };
+
+  /* =======================================================
+     レポート（印刷・PDF）とバックアップ
+     =======================================================*/
+  const CLINIC_DEFAULT = "いずみ整骨院";
+  function openReport() {
+    if (!(s.before && s.before.img) && !(s.after && s.after.img)) return toast("memoMsg", "先にBefore/Afterを設定してください");
+    $("rClinic").textContent = localStorage.al_clinic || CLINIC_DEFAULT;
+    const name = ($("patient").value || "").trim() || (s.before && s.before.patient) || (s.after && s.after.patient) || "—";
+    $("rPatient").textContent = name;
+    const d = new Date();
+    $("rDate").textContent = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+    [["before", "rBefore"], ["after", "rAfter"]].forEach(([key, id]) => {
+      const slot = s[key], im = $(id), none = $(id + "None"), dt = $(id + "Date"), ai = $(id + "Ai");
+      if (slot && slot.img) { im.src = slot.img; im.style.display = "block"; none.style.display = "none"; dt.textContent = slot.date ? "（撮影 " + fmtDate(slot.date) + "）" : ""; }
+      else { im.removeAttribute("src"); im.style.display = "none"; none.style.display = "block"; dt.textContent = ""; }
+      ai.innerHTML = slot && slot.ai && slot.ai.length ? slot.ai.join("<br>") : "解析なし";
+    });
+    const hasAi = (s.before && s.before.ai) || (s.after && s.after.ai);
+    $("rAiSec").style.display = hasAi ? "" : "none";
+    $("rMemo").textContent = ($("memo").value || "").trim() || "—";
+    $("reportView").hidden = false; document.body.style.overflow = "hidden";
+  }
+  $("openReport").onclick = openReport;
+  $("reportClose").onclick = () => { $("reportView").hidden = true; document.body.style.overflow = ""; };
+  $("reportPrint").onclick = () => window.print();
+  $("editClinic").onclick = () => {
+    const v = prompt("院名を入力してください", localStorage.al_clinic || CLINIC_DEFAULT);
+    if (v !== null) { localStorage.al_clinic = v.trim(); $("rClinic").textContent = v.trim() || CLINIC_DEFAULT; }
+  };
+
+  // ---- バックアップ：すべてをファイルへ書き出す ----
+  $("exportAll").onclick = () => {
+    try {
+      toast("backupMsg", "書き出しを準備しています…");
+      const data = {
+        app: "analysis-log", version: 1, at: Date.now(),
+        clinic: localStorage.al_clinic || "", patient: localStorage.al_patient || "", patients,
+        memo: localStorage.al_memo || "", scale: localStorage.al_scale || "",
+        before: s.before || null, after: s.after || null, shots: s.shots,
+      };
+      const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const d = new Date(), p = (n) => String(n).padStart(2, "0");
+      const a = document.createElement("a");
+      a.href = url; a.download = `分析Log_バックアップ_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 20000);
+      toast("backupMsg", `静止画 ${s.shots.length}枚を書き出しました`);
+    } catch (e) { toast("backupMsg", "書き出せませんでした：" + e.message); }
+  };
+
+  // ---- バックアップ：ファイルから読み込む ----
+  $("importAll").onchange = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    try {
+      toast("backupMsg", "読み込み中…");
+      const d = JSON.parse(await f.text());
+      if (!d || d.app !== "analysis-log" || !Array.isArray(d.shots)) return toast("backupMsg", "このファイルは分析Logのバックアップではありません");
+      if (!confirm(`静止画 ${d.shots.length}枚を今のデータに追加します。よろしいですか？
+（同じ画像は重複しません）`)) return toast("backupMsg", "読み込みを中止しました");
+      const have = new Set(s.shots.map((x) => x.id));
+      let added = 0;
+      for (const sh of d.shots) {
+        if (have.has(sh.id)) continue;
+        s.shots.push(sh); if (useIDB) await IDB.put(sh); added++;
+        if (sh.patient) addPatient(sh.patient);
+      }
+      if (!useIDB) saveShotsLS();
+      (d.patients || []).forEach(addPatient);
+      if (d.clinic) localStorage.al_clinic = d.clinic;
+      if (d.scale) localStorage.al_scale = d.scale;
+      if (!s.before && d.before) { s.before = d.before; saveSlot("before"); }
+      if (!s.after && d.after) { s.after = d.after; saveSlot("after"); }
+      if (!$("memo").value && d.memo) { $("memo").value = d.memo; localStorage.al_memo = d.memo; }
+      s.shots.sort((a, b) => (a.date || 0) - (b.date || 0));
+      updateCompare(); renderShots();
+      toast("backupMsg", `${added}枚を読み込みました（重複 ${d.shots.length - added}枚は追加せず）`);
+    } catch (err) { toast("backupMsg", "読み込めませんでした：" + err.message); }
   };
 
   /* ---- ダイアログ・初期化 ---- */
