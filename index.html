@@ -218,7 +218,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.7 β (r18)</span></h1>
+      <h1>分析Log <span>v0.7 β (r19)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -911,8 +911,12 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   const draw = { tool: "off", color: "#ff3b30", w: 6, cur: null }; // 描画ツール状態
   let pxPerCm = parseFloat(localStorage.al_scale) || 0;  // 1cmあたりのピクセル数（基準登録で決定）
 
-  const applyTransform = () => { editWrap.style.transform = `translate(${ed.tx}px,${ed.ty}px) scale(${ed.scale})`; renderMeasure(); renderDraw(); renderAi(); };
-  const drawEditGuides = () => drawGuides(editGuides, ed.mode, ed.vx, ed.hy, true);
+  const applyTransform = () => { editWrap.style.transform = `translate(${ed.tx}px,${ed.ty}px) scale(${ed.scale})`; renderMeasure(); renderDraw(); renderAi(); drawEditGuides(); };
+  const drawEditGuides = () => {
+    const r = imgRect();   // ガイドの枠を写真ぴったりに合わせる
+    editGuides.style.cssText = `position:absolute;left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;right:auto;bottom:auto;pointer-events:none`;
+    drawGuides(editGuides, ed.mode, ed.vx, ed.hy, true);
+  };
 
   function openEditor(shot) {
     ed.shot = shot;
@@ -1218,20 +1222,20 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       c.setAttribute("cx", p.x); c.setAttribute("cy", p.y); c.setAttribute("r", 5); svg.appendChild(c);
     });
   }
-  function drawAiOnCanvas(x) {
+  function drawAiOnCanvas(x, M, lw) {
     const lm = ed.shot && ed.shot.ai;
     if (!lm || !aiVisible) return;
-    x.strokeStyle = "#0a84ff"; x.lineWidth = 3; x.lineCap = "round";
+    x.strokeStyle = "#0a84ff"; x.lineWidth = lw; x.lineCap = "round";
     AI_CONN.forEach(([i, j]) => {
       if (!lm[i] || !lm[j]) return;
-      const a = toScreen({ u: lm[i].x, v: lm[i].y }), b = toScreen({ u: lm[j].x, v: lm[j].y });
+      const a = M({ u: lm[i].x, v: lm[i].y }), b = M({ u: lm[j].x, v: lm[j].y });
       x.beginPath(); x.moveTo(a.x, a.y); x.lineTo(b.x, b.y); x.stroke();
     });
     x.fillStyle = "#ffd60a";
     [LM.nose, LM.lsh, LM.rsh, LM.lhip, LM.rhip, LM.lkn, LM.rkn, LM.lank, LM.rank].forEach((i) => {
       if (!lm[i]) return;
-      const p = toScreen({ u: lm[i].x, v: lm[i].y });
-      x.beginPath(); x.arc(p.x, p.y, 5, 0, 7); x.fill();
+      const p = M({ u: lm[i].x, v: lm[i].y });
+      x.beginPath(); x.arc(p.x, p.y, lw * 1.8, 0, 7); x.fill();
     });
   }
   $("aiRun").onclick = runAi;
@@ -1267,12 +1271,13 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     const lx = e.clientX - r.left, ly = e.clientY - r.top;
     if (draw.tool !== "off") { gesture = { type: "draw", lx, ly, t: Date.now(), moved: false }; drawStart(lx, ly); return; }
     if (measure.mode !== "off") { gesture = { type: "measure", lx, ly, t: Date.now(), moved: false }; return; }
-    const nearV = ed.mode !== "off" && Math.abs(lx - ed.vx * r.width) <= HIT;
-    const nearH = ed.mode !== "off" && Math.abs(ly - ed.hy * r.height) <= HIT;
+    const gr = imgRect();
+    const nearV = ed.mode !== "off" && Math.abs(lx - (gr.x + ed.vx * gr.w)) <= HIT;
+    const nearH = ed.mode !== "off" && Math.abs(ly - (gr.y + ed.hy * gr.h)) <= HIT;
     let type = "pan";
     if (nearV || nearH) {
       type = nearV && nearH
-        ? (Math.abs(lx - ed.vx * r.width) <= Math.abs(ly - ed.hy * r.height) ? "vline" : "hline")
+        ? (Math.abs(lx - (gr.x + ed.vx * gr.w)) <= Math.abs(ly - (gr.y + ed.hy * gr.h)) ? "vline" : "hline")
         : (nearV ? "vline" : "hline");
     }
     gesture = { type, lx, ly, tx: ed.tx, ty: ed.ty, t: Date.now(), moved: false };
@@ -1288,8 +1293,8 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     if (Math.abs(lx - gesture.lx) > 4 || Math.abs(ly - gesture.ly) > 4) gesture.moved = true;
     if (gesture.type === "draw") { drawMove(lx, ly); return; }
     if (gesture.type === "pan") { ed.tx = gesture.tx + (lx - gesture.lx); ed.ty = gesture.ty + (ly - gesture.ly); applyTransform(); }
-    else if (gesture.type === "vline") { ed.vx = clamp(lx / r.width, 0, 1); drawEditGuides(); }
-    else if (gesture.type === "hline") { ed.hy = clamp(ly / r.height, 0, 1); drawEditGuides(); }
+    else if (gesture.type === "vline") { const g = imgRect(); ed.vx = clamp((lx - g.x) / g.w, 0, 1); drawEditGuides(); }
+    else if (gesture.type === "hline") { const g = imgRect(); ed.hy = clamp((ly - g.y) / g.h, 0, 1); drawEditGuides(); }
   });
 
   function startPinch() {
@@ -1330,47 +1335,42 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   editStage.addEventListener("pointercancel", endPointer);
 
   // ---- 現在の見た目をcanvasへ焼き込み（保存・反映で使用） ----
+  // ズームしていても「写真全体」を保存する（足先などが切れないように）
   function bake() {
     return new Promise((resolve) => {
       const r = imgRect();
-      // 写真が写っている範囲だけを切り出す（黒い余白を入れない）
-      const x0 = Math.max(0, r.x), y0 = Math.max(0, r.y);
-      const x1 = Math.min(r.W, r.x + r.w), y1 = Math.min(r.H, r.y + r.h);
-      const cw = Math.max(1, x1 - x0), ch = Math.max(1, y1 - y0);
-      // 元画像の細かさで出力（画面の大きさに関係なくきれいに保つ）
-      const k = Math.min(r.nw / r.w, 2400 / Math.max(cw, ch));
-      const out = Math.max(1, k);
-      const c = document.createElement("canvas");
-      c.width = Math.round(cw * out); c.height = Math.round(ch * out);
+      const cap = Math.min(1, 2400 / Math.max(r.nw, r.nh));   // 大きすぎる画像は抑える
+      const NW = Math.max(1, Math.round(r.nw * cap)), NH = Math.max(1, Math.round(r.nh * cap));
+      const c = document.createElement("canvas"); c.width = NW; c.height = NH;
       const x = c.getContext("2d");
-      x.scale(out, out); x.translate(-x0, -y0);
-      x.fillStyle = "#000"; x.fillRect(x0, y0, cw, ch);
+      const M = (p) => ({ x: p.u * NW, y: p.v * NH });          // 画像内の位置 → 出力画像の位置
+      const px = NW / r.nw;                                     // 線の太さの換算
       const img = new Image();
       img.onload = () => {
-        x.drawImage(img, r.x, r.y, r.w, r.h);   // 画面と同じ位置・大きさで描く
-        drawGuidesOnCanvas(x, r.W, r.H);
-        drawAiOnCanvas(x);
-        drawDrawingsOnCanvas(x);
+        x.drawImage(img, 0, 0, NW, NH);
+        drawGuidesOnCanvas(x, NW, NH);
+        drawAiOnCanvas(x, M, Math.max(2, NW / 300));
+        drawDrawingsOnCanvas(x, M, (w) => Math.max(1, w * px));
         resolve(c.toDataURL("image/jpeg", 0.85));
       };
       img.src = ed.shot.data;
     });
   }
-  function drawDrawingsOnCanvas(x) {
+  function drawDrawingsOnCanvas(x, M, SW) {
     const items = (ed.shot && ed.shot.draws) || [];
     items.forEach((it) => {
-      x.strokeStyle = it.color; x.fillStyle = it.color; x.lineWidth = strokeW(it.w); x.lineCap = "round"; x.lineJoin = "round";
+      x.strokeStyle = it.color; x.fillStyle = it.color; x.lineWidth = SW(it.w); x.lineCap = "round"; x.lineJoin = "round";
       if (it.t === "free") {
-        x.beginPath(); it.pts.forEach((p, i) => { const s = toScreen(p); i ? x.lineTo(s.x, s.y) : x.moveTo(s.x, s.y); }); x.stroke();
+        x.beginPath(); it.pts.forEach((p, i) => { const s = M(p); i ? x.lineTo(s.x, s.y) : x.moveTo(s.x, s.y); }); x.stroke();
       } else if (it.t === "circle") {
-        const a = toScreen(it.a), b = toScreen(it.b); x.beginPath(); x.arc(a.x, a.y, Math.hypot(b.x - a.x, b.y - a.y), 0, 7); x.stroke();
+        const a = M(it.a), b = M(it.b); x.beginPath(); x.arc(a.x, a.y, Math.hypot(b.x - a.x, b.y - a.y), 0, 7); x.stroke();
       } else if (it.t === "text") {
-        const p = toScreen(it.p); x.font = `bold ${Math.max(12, strokeW(it.w) * 4)}px sans-serif`; x.fillText(it.str, p.x, p.y);
+        const p = M(it.p); x.font = `bold ${Math.max(12, SW(it.w) * 4)}px sans-serif`; x.fillText(it.str, p.x, p.y);
       } else {
-        const a = toScreen(it.a), b = toScreen(it.b);
+        const a = M(it.a), b = M(it.b);
         x.beginPath(); x.moveTo(a.x, a.y); x.lineTo(b.x, b.y); x.stroke();
         if (it.t === "arrow") {
-          const ang = Math.atan2(b.y - a.y, b.x - a.x), h = Math.max(10, strokeW(it.w) * 3);
+          const ang = Math.atan2(b.y - a.y, b.x - a.x), h = Math.max(10, SW(it.w) * 3);
           [ang + Math.PI * 0.83, ang - Math.PI * 0.83].forEach((rr) => { x.beginPath(); x.moveTo(b.x, b.y); x.lineTo(b.x + Math.cos(rr) * h, b.y + Math.sin(rr) * h); x.stroke(); });
         }
       }
