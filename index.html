@@ -167,7 +167,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .editorBar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;
   padding-top:calc(10px + env(safe-area-inset-top));background:#0f1a13;border-bottom:1px solid #24352b}
 .editorBar #edTitle{font-weight:700}
-.editStage{position:relative;flex:1;min-height:0;overflow:hidden;background:#000;touch-action:none}
+.editStage{position:relative;flex:1;min-height:42vh;overflow:hidden;background:#000;touch-action:none}
 .editImgWrap{position:absolute;inset:0;display:grid;place-items:center;will-change:transform}
 .editImgWrap img{max-width:100%;max-height:100%;-webkit-user-select:none;user-select:none;pointer-events:none}
 .editStage .guides .center{cursor:grab}
@@ -180,7 +180,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 #aiLayer circle{fill:#ffd60a;stroke:#0a84ff;stroke-width:2}
 .aiRow{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:8px;margin:10px 0}
 .aiRow button{min-height:44px;padding:8px;font-size:14px}
-.aiOut{background:#12241a;border:1px solid #24352b;border-radius:12px;padding:10px 12px;margin-bottom:8px;color:#eafff0;font-size:13px;line-height:1.7}
+.aiOut{background:#12241a;border:1px solid #24352b;border-radius:12px;padding:10px 12px;margin-bottom:8px;color:#eafff0;font-size:13px;line-height:1.7;max-height:20vh;overflow-y:auto}
 .aiOut[hidden]{display:none}
 .aiOut b{color:#7fd6a3}
 .aiOut .note{display:block;margin-top:6px;color:#9db3a6;font-size:11px;font-weight:400}
@@ -192,7 +192,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .drawOpts .sub{flex:1;min-width:80px}
 .measureOut{margin:6px 0;min-height:20px;color:#eafff0;font-weight:700;background:#12241a;border:1px solid #24352b;border-radius:10px;padding:8px 10px;text-align:center}
 .measureOut:empty{display:none}
-.editorTools{padding:12px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:#0f1a13;border-top:1px solid #24352b;max-height:56vh;overflow-y:auto}
+.editorTools{padding:12px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:#0f1a13;border-top:1px solid #24352b;max-height:52vh;overflow-y:auto}
 .editorTools .segmented>span{color:#9db3a6}
 .editorTools .segmented button{background:#1b2a21;color:#cfe6d8}
 .editorTools .segmented button.on{background:var(--green);color:#fff}
@@ -215,7 +215,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.7 β (r14)</span></h1>
+      <h1>分析Log <span>v0.7 β (r15)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -1139,7 +1139,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       const q = aiQuality(ed.shot.ai);
       ed.shot.aiText = analyzePose(ed.shot.ai, ed.nw, ed.nh, pxPerCm);
       if (q < 0.7) ed.shot.aiText.unshift('<span class="warn">⚠ 検出があやしいです。骨格が体と合っているか必ず確認してください（患者さんだけが大きく写るようズームすると改善します）</span>');
-      saveShots(); aiVisible = true; localStorage.al_ai_show = "1"; renderAi(); showAiOut();
+      saveShots(); aiVisible = true; localStorage.al_ai_show = "1"; showAiOut(); renderAi();
       toast("edMsg", q < 0.7 ? "解析しました（精度が低い可能性あり）" : "解析しました");
     } catch (err) {
       toast("edMsg", "AI解析を読み込めませんでした（インターネット接続が必要です）");
@@ -1274,6 +1274,9 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       gesture = { type: "pan", lx: p.x - r.left, ly: p.y - r.top, tx: ed.tx, ty: ed.ty, t: Date.now(), moved: true };
     } else if (pointers.size === 0) gesture = null;
   }
+  // 画像エリアの大きさが変わったら重ね描きを再計算（結果パネル表示・画面回転など）
+  if (window.ResizeObserver) new ResizeObserver(() => { renderMeasure(); renderDraw(); renderAi(); }).observe(editStage);
+
   editStage.addEventListener("pointerup", endPointer);
   editStage.addEventListener("pointercancel", endPointer);
 
