@@ -129,6 +129,9 @@ nav#tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:12px}
 .capDate{text-align:center;font-weight:700;color:var(--green);font-size:12px;margin:0 0 8px;min-height:16px}
 .tapHint{display:inline-block;margin-top:2px;color:var(--green);font-weight:700}
+.filterRow{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px;color:var(--muted);margin:0 0 8px}
+.filterRow input{width:20px;height:20px}
+.shot .who{color:var(--green);font-weight:700}
 
 .segmented{display:flex;align-items:center;gap:6px;margin-top:12px;flex-wrap:wrap}
 .segmented>span{font-weight:700;font-size:13px;color:var(--muted);margin-right:2px}
@@ -215,7 +218,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.7 β (r16)</span></h1>
+      <h1>分析Log <span>v0.7 β (r17)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -304,7 +307,8 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         <h3>切り出した静止画</h3>
         <span id="shotCount" class="pill">0枚</span>
       </div>
-      <p class="hint">画像をタップすると編集画面が開きます。</p>
+      <p class="hint">画像をタップすると編集画面が開きます。撮影のたびに下へ貯まっていきます。</p>
+      <label class="filterRow"><input type="checkbox" id="filterPatient"> 上の患者名と一致するものだけ表示</label>
       <div id="shotGallery" class="shots"></div>
       <button id="clearShots" class="sub full">一覧を空にする</button>
     </section>
@@ -535,10 +539,56 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     level: false,
   };
   const saveSlot = (key) => { localStorage["al_" + key] = s[key] ? JSON.stringify(s[key]) : ""; };
-  const saveShots = () => {
+
+  /* ---- 静止画の保存先（IndexedDB：容量が大きく、たくさん貯められる） ---- */
+  const IDB = {
+    db: null,
+    open() {
+      return new Promise((res, rej) => {
+        const r = indexedDB.open("analysisLog", 1);
+        r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains("shots")) d.createObjectStore("shots", { keyPath: "id" }); };
+        r.onsuccess = () => { IDB.db = r.result; res(r.result); };
+        r.onerror = () => rej(r.error);
+      });
+    },
+    store(mode) { return IDB.db.transaction("shots", mode).objectStore("shots"); },
+    req(q) { return new Promise((res, rej) => { q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
+    put(shot) { return IDB.req(IDB.store("readwrite").put(JSON.parse(JSON.stringify(shot)))); },
+    del(id) { return IDB.req(IDB.store("readwrite").delete(id)); },
+    clear() { return IDB.req(IDB.store("readwrite").clear()); },
+    all() { return IDB.req(IDB.store("readonly").getAll()); },
+  };
+  let useIDB = false;
+  const saveShotsLS = () => {
     try { localStorage.al_shots = JSON.stringify(s.shots); }
     catch (e) { toast("reviewMsg", "保存容量がいっぱいです。不要な静止画を削除してください。"); }
   };
+  // 1枚だけ保存（編集・描画・解析のたびに呼ぶ）
+  function saveShot(shot) {
+    if (useIDB) IDB.put(shot).catch(() => toast("reviewMsg", "保存できませんでした"));
+    else saveShotsLS();
+  }
+  const saveShots = () => { if (!useIDB) saveShotsLS(); };  // 一覧全体（旧方式のとき用）
+
+  async function initStore() {
+    try {
+      if (!window.indexedDB) throw new Error("no idb");
+      await IDB.open();
+      useIDB = true;
+      // これまでlocalStorageに入っていた画像を引き継ぐ
+      const old = JSON.parse(localStorage.al_shots || "[]");
+      if (old.length) {
+        for (const sh of old) await IDB.put(sh);
+        localStorage.removeItem("al_shots");   // 旧領域を解放
+      }
+      s.shots = (await IDB.all()) || [];
+      s.shots.sort((a, b) => (a.date || 0) - (b.date || 0));
+    } catch (e) {
+      useIDB = false;                          // 使えない端末では従来どおり
+      s.shots = JSON.parse(localStorage.al_shots || "[]");
+    }
+    renderShots();
+  }
 
   // ---- タブ切替 ----
   const openTab = (id) => {
@@ -668,8 +718,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   function loadVideo(blob) {
     if (s.url) URL.revokeObjectURL(s.url);
     s.url = URL.createObjectURL(blob);
-    $("video").src = s.url;
-    s.shots = []; saveShots(); renderShots();
+    $("video").src = s.url;   // 静止画一覧は消さずに貯めていく
   }
   $("startRec").onclick = () => {
     s.chunks = [];
@@ -714,10 +763,12 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   function captureShot() {
     const v = video, c = $("canvas");
     if (!v.src || v.readyState < 2) { toast("reviewMsg", "動画を再生できる状態にしてください"); toast("play2Msg", "動画を再生できる状態にしてください"); return; }
-    c.width = v.videoWidth; c.height = v.videoHeight;
+    const k = Math.min(1, 1440 / Math.max(v.videoWidth, v.videoHeight));   // 容量を抑えるため長辺1440pxまで
+    c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
     c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
-    s.shots.push({ id: Date.now() + Math.random(), data: c.toDataURL("image/jpeg", 0.9), time: v.currentTime, date: Date.now() });
-    saveShots(); renderShots(); // localStorageへ自動保存
+    const shot = { id: Date.now() + Math.random(), data: c.toDataURL("image/jpeg", 0.85), time: v.currentTime, date: Date.now(), patient: ($("patient").value || "") };
+    s.shots.push(shot);
+    saveShot(shot); renderShots();   // 自動保存
     const msg = `③比較の下に自動保存しました（全${s.shots.length}枚）`;
     toast("reviewMsg", msg); toast("play2Msg", msg);
   }
@@ -740,22 +791,26 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   video.addEventListener("timeupdate", () => { $("playTime").textContent = fmtTime(video.currentTime || 0); });
 
   $("clearShots").onclick = () => {
-    if (confirm("静止画一覧を空にしますか？")) { s.shots = []; saveShots(); renderShots(); }
+    if (confirm("静止画一覧を空にしますか？（保存した画像がすべて消えます）")) { s.shots = []; if (useIDB) IDB.clear().catch(() => {}); else saveShotsLS(); renderShots(); }
   };
 
   function renderShots() {
     const g = $("shotGallery");
     g.innerHTML = "";
-    $("shotCount").textContent = s.shots.length + "枚";
-    if (!s.shots.length) { g.innerHTML = "<p>まだ静止画はありません。</p>"; return; }
-    s.shots.forEach((shot, i) => {
+    const cur = ($("patient").value || "").trim();
+    const onlyMine = $("filterPatient") && $("filterPatient").checked && cur;
+    const list = onlyMine ? s.shots.filter((x) => (x.patient || "") === cur) : s.shots;
+    $("shotCount").textContent = onlyMine ? `${list.length}枚 / 全${s.shots.length}枚` : s.shots.length + "枚";
+    if (!list.length) { g.innerHTML = "<p>" + (onlyMine ? "この患者名の静止画はありません。" : "まだ静止画はありません。") + "</p>"; return; }
+    list.forEach((shot, i) => {
       const d = document.createElement("div");
       d.className = "shot";
       const edited = shot.edited ? '<span class="edited">編集済</span>' : "";
       const when = shot.date ? fmtDate(shot.date) : `位置 ${fmtTime(shot.time)}`;
+      const who = shot.patient ? `<span class="who">${shot.patient}</span> ` : "";
       d.innerHTML =
         `<img src="${shot.edited || shot.data}" alt="${i + 1}枚目">` +
-        `<p class="cap">${when} ${edited}<br><span class="tapHint">タップで編集</span></p>` +
+        `<p class="cap">${who}${when} ${edited}<br><span class="tapHint">タップで編集</span></p>` +
         `<div class="shotBtns">` +
         `<button data-a="before">Before</button>` +
         `<button data-a="after">After</button>` +
@@ -773,7 +828,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     else if (a === "before") { s.before = slot; saveSlot("before"); updateCompare(); }
     else if (a === "after") { s.after = slot; saveSlot("after"); updateCompare(); }
     else if (a === "download") download(slot.img, "shot");
-    else if (a === "delete") { s.shots = s.shots.filter((y) => y.id !== shot.id); saveShots(); renderShots(); }
+    else if (a === "delete") { s.shots = s.shots.filter((y) => y.id !== shot.id); if (useIDB) IDB.del(shot.id).catch(() => {}); else saveShotsLS(); renderShots(); }
   }
 
   /* =======================================================
@@ -984,13 +1039,13 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     el.onclick = () => { draw.color = el.dataset.color; document.querySelectorAll(".drawOpts .sw").forEach((x) => x.classList.toggle("on", x === el)); };
   });
   $("drawWidth").onchange = (e) => { draw.w = +e.target.value; };
-  $("drawUndo").onclick = () => { if (ed.shot && ed.shot.draws.length) { ed.shot.draws.pop(); saveShots(); renderDraw(); } };
-  $("drawClear").onclick = () => { if (ed.shot && ed.shot.draws.length && confirm("描き込みを全部消しますか？")) { ed.shot.draws = []; saveShots(); renderDraw(); } };
+  $("drawUndo").onclick = () => { if (ed.shot && ed.shot.draws.length) { ed.shot.draws.pop(); saveShot(ed.shot); renderDraw(); } };
+  $("drawClear").onclick = () => { if (ed.shot && ed.shot.draws.length && confirm("描き込みを全部消しますか？")) { ed.shot.draws = []; saveShot(ed.shot); renderDraw(); } };
 
   function drawStart(sx, sy) {
     const p = toNorm(sx, sy);
     if (draw.tool === "text") {
-      const str = prompt("文字を入力"); if (str) { ed.shot.draws.push({ t: "text", color: draw.color, w: draw.w, p, str }); saveShots(); renderDraw(); }
+      const str = prompt("文字を入力"); if (str) { ed.shot.draws.push({ t: "text", color: draw.color, w: draw.w, p, str }); saveShot(ed.shot); renderDraw(); }
       draw.cur = null; return;
     }
     if (draw.tool === "free") draw.cur = { t: "free", color: draw.color, w: draw.w, pts: [p] };
@@ -1008,7 +1063,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     if (!draw.cur) return;
     const c = draw.cur; draw.cur = null;
     const tiny = c.t === "free" ? c.pts.length < 2 : (Math.abs(c.a.u - c.b.u) < 0.005 && Math.abs(c.a.v - c.b.v) < 0.005);
-    if (!tiny) { ed.shot.draws.push(c); saveShots(); }
+    if (!tiny) { ed.shot.draws.push(c); saveShot(ed.shot); }
     renderDraw();
   }
   function strokeW(w) { const { dw } = fitRect(); return Math.max(1, w * (dw / (ed.nw || 1)) * ed.scale); } // 画面上の線幅
@@ -1139,7 +1194,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       const q = aiQuality(ed.shot.ai);
       ed.shot.aiText = analyzePose(ed.shot.ai, ed.nw, ed.nh, pxPerCm);
       if (q < 0.7) ed.shot.aiText.unshift('<span class="warn">⚠ 検出があやしいです。骨格が体と合っているか必ず確認してください（患者さんだけが大きく写るようズームすると改善します）</span>');
-      saveShots(); aiVisible = true; localStorage.al_ai_show = "1"; showAiOut(); renderAi();
+      saveShot(ed.shot); aiVisible = true; localStorage.al_ai_show = "1"; showAiOut(); renderAi();
       toast("edMsg", q < 0.7 ? "解析しました（精度が低い可能性あり）" : "解析しました");
     } catch (err) {
       toast("edMsg", "AI解析を読み込めませんでした（インターネット接続が必要です）");
@@ -1189,7 +1244,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   $("aiToggle").onclick = () => { aiVisible = !aiVisible; localStorage.al_ai_show = aiVisible ? "1" : "0"; renderAi(); toast("edMsg", aiVisible ? "骨格を表示（数値の確認用）" : "骨格を非表示（解析の数値はそのまま使えます）"); };
   $("aiClear").onclick = () => {
     if (!ed.shot) return;
-    delete ed.shot.ai; delete ed.shot.aiText; saveShots(); renderAi(); showAiOut(); toast("edMsg", "解析を消しました");
+    delete ed.shot.ai; delete ed.shot.aiText; saveShot(ed.shot); renderAi(); showAiOut(); toast("edMsg", "解析を消しました");
   };
 
   function renderMeasure() {
@@ -1348,7 +1403,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   function commitEdit(data) {
     ed.shot.edited = data;
     ed.shot.edit = { grid: ed.mode, vx: ed.vx, hy: ed.hy, tx: ed.tx, ty: ed.ty, scale: ed.scale };
-    saveShots(); renderShots();
+    saveShot(ed.shot); renderShots();
   }
   $("edSave").onclick = async () => { commitEdit(await bake()); toast("edMsg", "保存しました"); };
   $("edToBefore").onclick = async () => {
@@ -1367,11 +1422,15 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   $("help").onclick = () => dialog.showModal();
   $("close").onclick = () => dialog.close();
 
+  $("filterPatient").onchange = renderShots;
+  $("patient").addEventListener("input", () => { if ($("filterPatient").checked) renderShots(); });
+
   setSegmented("record", s.recGrid);
   setLevelBtn();
   drawRecordGuides();
   updateCompare();
   renderShots();
+  initStore();   // 保存済みの静止画を読み込む（旧データも引き継ぎ）
 })();
 
 </script>
