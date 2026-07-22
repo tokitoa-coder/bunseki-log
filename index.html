@@ -181,7 +181,10 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 #drawLayer text{font-weight:700}
 #aiLayer line{stroke:#0a84ff;stroke-width:3;stroke-linecap:round;opacity:.9}
 #aiLayer circle{fill:#ffd60a;stroke:#0a84ff;stroke-width:2}
-.aiRow{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:8px;margin:10px 0}
+.aiRow{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}
+.aiRow .span2{grid-column:1/-1}
+.aiRow #aiEdit.on{background:var(--green);color:#fff}
+#aiLayer .handle{fill:#fff;stroke:#0a84ff;stroke-width:3}
 .aiRow button{min-height:44px;padding:8px;font-size:14px}
 .aiOut{background:#12241a;border:1px solid #24352b;border-radius:12px;padding:10px 12px;margin-bottom:8px;color:#eafff0;font-size:13px;line-height:1.7;max-height:20vh;overflow-y:auto}
 .aiOut[hidden]{display:none}
@@ -256,7 +259,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.8 β (r21)</span></h1>
+      <h1>分析Log <span>v0.8 β (r22)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -578,7 +581,9 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         <button id="drawClear" class="sub">全消去</button>
       </div>
       <div class="aiRow">
-        <button id="aiRun">🤖 AIで姿勢を解析</button>
+        <button id="aiRun" class="span2">🤖 AIで姿勢を解析</button>
+        <button id="aiEdit" class="sub">✋ 点を修正</button>
+        <button id="aiScale" class="sub">cm基準を登録</button>
         <button id="aiToggle" class="sub">骨格の表示</button>
         <button id="aiClear" class="sub">解析を消す</button>
       </div>
@@ -1092,7 +1097,7 @@ OK＝画像も削除する
     setSegmented("edit", ed.mode);
     measure.mode = "off"; measure.pts = []; setSegmented("measure", "off"); $("measureOut").textContent = "";
     draw.tool = "off"; draw.cur = null; setSegmented("draw", "off");
-    aiVisible = localStorage.al_ai_show !== "0"; updateHint(); renderMeasure(); renderDraw(); renderAi(); showAiOut();
+    aiVisible = localStorage.al_ai_show !== "0"; aiEditMode = false; $("aiEdit").classList.remove("on"); updateHint(); renderMeasure(); renderDraw(); renderAi(); showAiOut();
     toast("edMsg", "");
     $("editor").hidden = false;
     document.body.style.overflow = "hidden";
@@ -1175,7 +1180,7 @@ OK＝画像も削除する
     } else if (measure.mode === "scale") {
       const { dx, dy } = natDelta(p[0], p[1]), d = Math.hypot(dx, dy);
       const cm = parseFloat(prompt("この2点の実際の長さ（cm）を入力してください", "10"));
-      if (cm > 0) { pxPerCm = d / cm; localStorage.al_scale = String(pxPerCm); out.textContent = `基準登録：1cm ＝ ${pxPerCm.toFixed(1)}px（以後cm表示）`; }
+      if (cm > 0) { pxPerCm = d / cm; localStorage.al_scale = String(pxPerCm); out.textContent = `基準登録：1cm ＝ ${pxPerCm.toFixed(1)}px（以後cm表示）`; recomputeAi(); if (ed.shot) saveShot(ed.shot); }
       else { measure.pts = []; out.textContent = "基準登録をキャンセルしました"; }
     }
   }
@@ -1263,13 +1268,18 @@ OK＝画像も削除する
 
   /* ---- AI姿勢解析（MediaPipe Pose） ---- */
   const LM = { nose: 0, lsh: 11, rsh: 12, lel: 13, rel: 14, lwr: 15, rwr: 16, lhip: 23, rhip: 24, lkn: 25, rkn: 26, lank: 27, rank: 28, lfoot: 31, rfoot: 32 };
-  const AI_CONN = [[11, 12], [11, 23], [12, 24], [23, 24], [11, 13], [13, 15], [12, 14], [14, 16], [23, 25], [25, 27], [24, 26], [26, 28], [27, 31], [28, 32]];
-  let aiVisible = localStorage.al_ai_show !== "0", poseObj = null;
+  const AI_CONN = [[11, 12], [11, 23], [12, 24], [23, 24], [11, 13], [13, 15], [12, 14], [14, 16], [23, 25], [25, 27], [24, 26], [26, 28], [27, 31], [28, 32], [7, 0], [8, 0]];
+  const EDIT_LM = [0, 7, 8, 11, 12, 23, 24, 25, 26, 27, 28];   // 手で直せる点：鼻・耳・肩・骨盤・膝・足首
+  let aiVisible = localStorage.al_ai_show !== "0", poseObj = null, aiEditMode = false;
 
   // 解析の計算部（純粋関数：landmarksから所見の文字列を作る）
   function analyzePose(lm, nw, nh, ppc) {
     const P = (i) => ({ x: lm[i].x * nw, y: lm[i].y * nh });
-    const val = (px) => (ppc > 0 ? (px / ppc).toFixed(1) + "cm" : Math.round(px) + "px");
+    const val = (px) => {
+      if (!(ppc > 0)) return Math.round(px) + "px";
+      const cm = px / ppc;
+      return cm < 1 ? Math.round(cm * 10) + "mm" : cm.toFixed(1) + "cm";
+    };
     const tiltOf = (a, b) => { const d = Math.abs(Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI); return Math.min(d, 180 - d); };
     const angAt = (a, v, b) => {
       const p = { x: a.x - v.x, y: a.y - v.y }, q = { x: b.x - v.x, y: b.y - v.y };
@@ -1350,13 +1360,32 @@ OK＝画像も削除する
       // 切り出し範囲の座標 → 画像全体の座標へ戻す
       ed.shot.ai = lm.map((p) => ({ x: cp.u0 + p.x * (cp.u1 - cp.u0), y: cp.v0 + p.y * (cp.v1 - cp.v0), v: p.visibility }));
       const q = aiQuality(ed.shot.ai);
-      ed.shot.aiText = analyzePose(ed.shot.ai, ed.nw, ed.nh, pxPerCm);
+      const rr = imgRect(); ed.shot.aiText = analyzePose(ed.shot.ai, rr.nw, rr.nh, pxPerCm);
       if (q < 0.7) ed.shot.aiText.unshift('<span class="warn">⚠ 検出があやしいです。骨格が体と合っているか必ず確認してください（患者さんだけが大きく写るようズームすると改善します）</span>');
       saveShot(ed.shot); aiVisible = true; localStorage.al_ai_show = "1"; showAiOut(); renderAi();
       toast("edMsg", q < 0.7 ? "解析しました（精度が低い可能性あり）" : "解析しました");
     } catch (err) {
       toast("edMsg", "AI解析を読み込めませんでした（インターネット接続が必要です）");
     }
+  }
+  // 点を動かしたりcm基準を登録したら、その場で計算し直す
+  function recomputeAi() {
+    if (!(ed.shot && ed.shot.ai)) return;
+    const r = imgRect();
+    ed.shot.aiText = analyzePose(ed.shot.ai, r.nw, r.nh, pxPerCm);
+    showAiOut();
+  }
+  // 一番近い点を探す（つかむ判定）
+  function nearestLm(lx, ly) {
+    const lm = ed.shot && ed.shot.ai;
+    if (!lm || !aiEditMode) return -1;
+    let best = -1, bd = 30;
+    EDIT_LM.forEach((i) => {
+      if (!lm[i]) return;
+      const p = toScreen({ u: lm[i].x, v: lm[i].y }), d = Math.hypot(p.x - lx, p.y - ly);
+      if (d < bd) { bd = d; best = i; }
+    });
+    return best;
   }
   function showAiOut() {
     const box = $("aiOut");
@@ -1376,10 +1405,13 @@ OK＝画像も削除する
       l.setAttribute("x1", a.x); l.setAttribute("y1", a.y); l.setAttribute("x2", b.x); l.setAttribute("y2", b.y);
       svg.appendChild(l);
     });
-    [LM.nose, LM.lsh, LM.rsh, LM.lhip, LM.rhip, LM.lkn, LM.rkn, LM.lank, LM.rank].forEach((i) => {
+    EDIT_LM.forEach((i) => {
       if (!lm[i]) return;
       const p = toScreen({ u: lm[i].x, v: lm[i].y }), c = document.createElementNS(NS, "circle");
-      c.setAttribute("cx", p.x); c.setAttribute("cy", p.y); c.setAttribute("r", 5); svg.appendChild(c);
+      c.setAttribute("cx", p.x); c.setAttribute("cy", p.y);
+      c.setAttribute("r", aiEditMode ? 11 : 5);
+      if (aiEditMode) c.setAttribute("class", "handle");
+      svg.appendChild(c);
     });
   }
   function drawAiOnCanvas(x, M, lw) {
@@ -1399,6 +1431,21 @@ OK＝画像も削除する
     });
   }
   $("aiRun").onclick = runAi;
+  $("aiEdit").onclick = () => {
+    if (!(ed.shot && ed.shot.ai)) return toast("edMsg", "先に「AIで姿勢を解析」を押してください");
+    aiEditMode = !aiEditMode;
+    $("aiEdit").classList.toggle("on", aiEditMode);
+    if (aiEditMode) { aiVisible = true; measure.mode = "off"; setSegmented("measure", "off"); draw.tool = "off"; setSegmented("draw", "off"); }
+    $("edHint").textContent = aiEditMode ? "白い丸を指でドラッグして位置を直せます（数値はその場で計算し直します）" : "1本指＝移動 / 2本指＝拡大縮小 / 中心線ドラッグ / ダブルタップでリセット";
+    renderAi();
+    toast("edMsg", aiEditMode ? "点の修正モード：ずれている点をドラッグしてください" : "修正モードを終了しました");
+  };
+  $("aiScale").onclick = () => {
+    measure.mode = "scale"; measure.pts = []; setSegmented("measure", "scale");
+    aiEditMode = false; $("aiEdit").classList.remove("on"); renderAi();
+    $("measureOut").textContent = ""; updateHint();
+    toast("edMsg", "長さが分かる2点をタップしてください（例：身長・机の幅など）");
+  };
   $("aiToggle").onclick = () => { aiVisible = !aiVisible; localStorage.al_ai_show = aiVisible ? "1" : "0"; renderAi(); toast("edMsg", aiVisible ? "骨格を表示（数値の確認用）" : "骨格を非表示（解析の数値はそのまま使えます）"); };
   $("aiClear").onclick = () => {
     if (!ed.shot) return;
@@ -1429,6 +1476,8 @@ OK＝画像も削除する
     if (pointers.size === 2) { startPinch(); return; }
     const r = editStage.getBoundingClientRect();
     const lx = e.clientX - r.left, ly = e.clientY - r.top;
+    const hit = nearestLm(lx, ly);
+    if (hit >= 0) { gesture = { type: "lm", i: hit, t: Date.now(), moved: false }; return; }
     if (draw.tool !== "off") { gesture = { type: "draw", lx, ly, t: Date.now(), moved: false }; drawStart(lx, ly); return; }
     if (measure.mode !== "off") { gesture = { type: "measure", lx, ly, t: Date.now(), moved: false }; return; }
     const gr = imgRect();
@@ -1451,6 +1500,12 @@ OK＝画像も削除する
     if (!gesture) return;
     const lx = e.clientX - r.left, ly = e.clientY - r.top;
     if (Math.abs(lx - gesture.lx) > 4 || Math.abs(ly - gesture.ly) > 4) gesture.moved = true;
+    if (gesture.type === "lm") {
+      const p = toNorm(lx, ly);
+      ed.shot.ai[gesture.i] = { x: clamp(p.u, 0, 1), y: clamp(p.v, 0, 1), v: 1 };
+      renderAi(); recomputeAi();     // ← 動かすたびに肩の傾き・膝角度などを再計算
+      return;
+    }
     if (gesture.type === "draw") { drawMove(lx, ly); return; }
     if (gesture.type === "pan") { ed.tx = gesture.tx + (lx - gesture.lx); ed.ty = gesture.ty + (ly - gesture.ly); applyTransform(); }
     else if (gesture.type === "vline") { const g = imgRect(); ed.vx = clamp((lx - g.x) / g.w, 0, 1); drawEditGuides(); }
@@ -1476,14 +1531,15 @@ OK＝画像も削除する
   function endPointer(e) {
     if (!pointers.has(e.pointerId)) return;
     pointers.delete(e.pointerId);
-    if (gesture && gesture.type === "draw") { drawEnd(); }
+    if (gesture && gesture.type === "lm") { if (ed.shot) saveShot(ed.shot); }
+    else if (gesture && gesture.type === "draw") { drawEnd(); }
     else if (gesture && gesture.type === "measure") {
       if (!gesture.moved && Date.now() - gesture.t < 300 && pointers.size === 0) placePoint(gesture.lx, gesture.ly);
     } else if (gesture && gesture.type !== "pinch" && !gesture.moved && Date.now() - gesture.t < 250 && pointers.size === 0) {
       const now = Date.now();
       if (now - lastTap < 300) { resetView(); lastTap = 0; } else lastTap = now;   // ダブルタップでリセット（測定・描画中は無効）
     }
-    if (pointers.size === 1 && measure.mode === "off" && draw.tool === "off") {
+    if (pointers.size === 1 && measure.mode === "off" && draw.tool === "off" && !aiEditMode) {
       const p = [...pointers.values()][0], r = editStage.getBoundingClientRect();
       gesture = { type: "pan", lx: p.x - r.left, ly: p.y - r.top, tx: ed.tx, ty: ed.ty, t: Date.now(), moved: true };
     } else if (pointers.size === 0) gesture = null;
