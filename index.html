@@ -176,6 +176,14 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .measureLayer circle{fill:#39d353;stroke:#0b120e;stroke-width:2}
 #drawLayer line,#drawLayer polyline,#drawLayer path,#drawLayer circle,#drawLayer ellipse{fill:none}
 #drawLayer text{font-weight:700}
+#aiLayer line{stroke:#0a84ff;stroke-width:3;stroke-linecap:round;opacity:.9}
+#aiLayer circle{fill:#ffd60a;stroke:#0a84ff;stroke-width:2}
+.aiRow{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:8px;margin:10px 0}
+.aiRow button{min-height:44px;padding:8px;font-size:14px}
+.aiOut{background:#12241a;border:1px solid #24352b;border-radius:12px;padding:10px 12px;margin-bottom:8px;color:#eafff0;font-size:13px;line-height:1.7}
+.aiOut[hidden]{display:none}
+.aiOut b{color:#7fd6a3}
+.aiOut .note{display:block;margin-top:6px;color:#9db3a6;font-size:11px;font-weight:400}
 .drawOpts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0}
 .drawOpts .sw{width:30px;height:30px;border-radius:50%;border:2px solid #24352b;box-sizing:border-box}
 .drawOpts .sw.on{border-color:#fff;box-shadow:0 0 0 2px var(--green)}
@@ -206,7 +214,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.3 β (r12)</span></h1>
+      <h1>分析Log <span>v0.7 β (r13)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -396,6 +404,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         <button data-grid="3">3×3</button>
         <button data-grid="5">5×5</button>
         <button data-grid="8">8×8</button>
+        <button data-grid="16">16×16</button>
       </div>
       <button id="levelToggle" class="sub full">水平器：OFF</button>
       <div class="grid">
@@ -416,6 +425,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     <div id="editStage" class="editStage">
       <div id="editImgWrap" class="editImgWrap"><img id="editImg" alt="編集中の画像"></div>
       <div id="editGuides" class="guides"></div>
+      <svg id="aiLayer" class="measureLayer"></svg>
       <svg id="drawLayer" class="measureLayer"></svg>
       <svg id="measureLayer" class="measureLayer"></svg>
     </div>
@@ -428,6 +438,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         <button data-grid="3">3×3</button>
         <button data-grid="5">5×5</button>
         <button data-grid="8">8×8</button>
+        <button data-grid="16">16×16</button>
       </div>
       <div class="segmented" data-target="measure">
         <span>測定</span>
@@ -464,6 +475,12 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         <button id="drawUndo" class="sub">1つ戻す</button>
         <button id="drawClear" class="sub">全消去</button>
       </div>
+      <div class="aiRow">
+        <button id="aiRun">🤖 AIで姿勢を解析</button>
+        <button id="aiToggle" class="sub">骨格の表示</button>
+        <button id="aiClear" class="sub">解析を消す</button>
+      </div>
+      <div id="aiOut" class="aiOut" hidden></div>
       <div class="grid">
         <button id="edZoomOut" class="sub">ズーム −</button>
         <button id="edZoomIn" class="sub">ズーム ＋</button>
@@ -838,7 +855,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   const draw = { tool: "off", color: "#ff3b30", w: 6, cur: null }; // 描画ツール状態
   let pxPerCm = parseFloat(localStorage.al_scale) || 0;  // 1cmあたりのピクセル数（基準登録で決定）
 
-  const applyTransform = () => { editWrap.style.transform = `translate(${ed.tx}px,${ed.ty}px) scale(${ed.scale})`; renderMeasure(); renderDraw(); };
+  const applyTransform = () => { editWrap.style.transform = `translate(${ed.tx}px,${ed.ty}px) scale(${ed.scale})`; renderMeasure(); renderDraw(); renderAi(); };
   const drawEditGuides = () => drawGuides(editGuides, ed.mode, ed.vx, ed.hy, true);
 
   function openEditor(shot) {
@@ -854,7 +871,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     setSegmented("edit", ed.mode);
     measure.mode = "off"; measure.pts = []; setSegmented("measure", "off"); $("measureOut").textContent = "";
     draw.tool = "off"; draw.cur = null; setSegmented("draw", "off");
-    updateHint(); renderMeasure(); renderDraw();
+    aiVisible = true; updateHint(); renderMeasure(); renderDraw(); renderAi(); showAiOut();
     toast("edMsg", "");
     $("editor").hidden = false;
     document.body.style.overflow = "hidden";
@@ -1030,6 +1047,125 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     });
   }
 
+  /* ---- AI姿勢解析（MediaPipe Pose） ---- */
+  const LM = { nose: 0, lsh: 11, rsh: 12, lel: 13, rel: 14, lwr: 15, rwr: 16, lhip: 23, rhip: 24, lkn: 25, rkn: 26, lank: 27, rank: 28, lfoot: 31, rfoot: 32 };
+  const AI_CONN = [[11, 12], [11, 23], [12, 24], [23, 24], [11, 13], [13, 15], [12, 14], [14, 16], [23, 25], [25, 27], [24, 26], [26, 28], [27, 31], [28, 32]];
+  let aiVisible = true, poseObj = null;
+
+  // 解析の計算部（純粋関数：landmarksから所見の文字列を作る）
+  function analyzePose(lm, nw, nh, ppc) {
+    const P = (i) => ({ x: lm[i].x * nw, y: lm[i].y * nh });
+    const val = (px) => (ppc > 0 ? (px / ppc).toFixed(1) + "cm" : Math.round(px) + "px");
+    const tiltOf = (a, b) => { const d = Math.abs(Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI); return Math.min(d, 180 - d); };
+    const angAt = (a, v, b) => {
+      const p = { x: a.x - v.x, y: a.y - v.y }, q = { x: b.x - v.x, y: b.y - v.y };
+      return Math.acos(clamp((p.x * q.x + p.y * q.y) / (Math.hypot(p.x, p.y) * Math.hypot(q.x, q.y) || 1), -1, 1)) * 180 / Math.PI;
+    };
+    const lsh = P(LM.lsh), rsh = P(LM.rsh), lhip = P(LM.lhip), rhip = P(LM.rhip);
+    // 本人の右が画像のどちら側かを判定（正面/背面で左右が入れ替わるため）
+    const rightOnLeftSide = rsh.x < lsh.x;
+    const sideByX = (dx) => (dx < 0 ? (rightOnLeftSide ? "右" : "左") : (rightOnLeftSide ? "左" : "右"));
+    const out = [];
+    const flat = (px) => px < (ppc > 0 ? ppc * 0.2 : 8); // ごく僅かな差は「ほぼ水平」扱い
+    // 肩の高さ
+    const shDrop = Math.abs(rsh.y - lsh.y), shLow = rsh.y > lsh.y ? "右" : "左";
+    out.push(`<b>肩の高さ</b>：` + (flat(shDrop) ? "ほぼ水平" : `${shLow}肩が ${val(shDrop)} 低い`) + `（傾き ${tiltOf(lsh, rsh).toFixed(1)}°）`);
+    // 骨盤
+    const hipDrop = Math.abs(rhip.y - lhip.y), hipLow = rhip.y > lhip.y ? "右" : "左";
+    out.push(`<b>骨盤の傾き</b>：` + (flat(hipDrop) ? "ほぼ水平" : `${hipLow}が ${val(hipDrop)} 低い`) + `（傾き ${tiltOf(lhip, rhip).toFixed(1)}°）`);
+    // 体幹の傾き（肩の中心 vs 骨盤の中心）
+    const shMid = { x: (lsh.x + rsh.x) / 2, y: (lsh.y + rsh.y) / 2 }, hipMid = { x: (lhip.x + rhip.x) / 2, y: (lhip.y + rhip.y) / 2 };
+    const trunkDx = shMid.x - hipMid.x, trunkDeg = Math.abs(Math.atan2(trunkDx, hipMid.y - shMid.y) * 180 / Math.PI);
+    out.push(`<b>体幹の傾き</b>：` + (trunkDeg < 1 ? "ほぼ垂直" : `${sideByX(trunkDx)}へ ${trunkDeg.toFixed(1)}°`));
+    // 頭部位置（鼻が肩の中心からどれだけ横にずれているか）
+    const nose = P(LM.nose), headDx = nose.x - shMid.x;
+    out.push(`<b>頭の位置</b>：` + (flat(Math.abs(headDx)) ? "ほぼ中心" : `${sideByX(headDx)}へ ${val(Math.abs(headDx))} ずれ`));
+    // 膝の角度
+    const kneeR = angAt(P(LM.rhip), P(LM.rkn), P(LM.rank)), kneeL = angAt(P(LM.lhip), P(LM.lkn), P(LM.lank));
+    out.push(`<b>膝の角度</b>：右 ${kneeR.toFixed(0)}° ／ 左 ${kneeL.toFixed(0)}°（差 ${Math.abs(kneeR - kneeL).toFixed(0)}°）`);
+    // 左右差まとめ
+    out.push(`<b>左右差まとめ</b>：肩 ${val(shDrop)}／骨盤 ${val(hipDrop)}／膝 ${Math.abs(kneeR - kneeL).toFixed(0)}°`);
+    if (!(ppc > 0)) out.push('<span class="note">※cm表示にするには「基準登録」で長さの基準を1回登録してください</span>');
+    out.push('<span class="note">※AIによる推定値です。診断ではなく、説明の目安としてお使いください</span>');
+    return out;
+  }
+
+  async function loadPose() {
+    if (window.Pose) return;
+    await new Promise((res, rej) => {
+      const sc = document.createElement("script");
+      sc.src = "https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js";
+      sc.onload = res; sc.onerror = () => rej(new Error("読み込み失敗"));
+      document.head.appendChild(sc);
+    });
+  }
+  async function runAi() {
+    if (!ed.shot) return;
+    toast("edMsg", "AI解析中…（初回は少し時間がかかります）");
+    try {
+      await loadPose();
+      if (!poseObj) {
+        poseObj = new window.Pose({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${f}` });
+        poseObj.setOptions({ modelComplexity: 1, staticImageMode: true, smoothLandmarks: false, minDetectionConfidence: 0.5 });
+      }
+      const result = await new Promise((resolve) => { poseObj.onResults(resolve); poseObj.send({ image: editImg }); });
+      const lm = result && result.poseLandmarks;
+      if (!lm || !lm.length) { toast("edMsg", "人物を検出できませんでした。全身が写った画像でお試しください"); return; }
+      ed.shot.ai = lm.map((p) => ({ x: p.x, y: p.y, v: p.visibility }));
+      ed.shot.aiText = analyzePose(ed.shot.ai, ed.nw, ed.nh, pxPerCm);
+      saveShots(); aiVisible = true; renderAi(); showAiOut();
+      toast("edMsg", "解析しました");
+    } catch (err) {
+      toast("edMsg", "AI解析を読み込めませんでした（インターネット接続が必要です）");
+    }
+  }
+  function showAiOut() {
+    const box = $("aiOut");
+    if (ed.shot && ed.shot.aiText && ed.shot.aiText.length) { box.innerHTML = ed.shot.aiText.join("<br>"); box.hidden = false; }
+    else { box.innerHTML = ""; box.hidden = true; }
+  }
+  function renderAi() {
+    const svg = $("aiLayer"); if (!svg) return;
+    svg.innerHTML = "";
+    const lm = ed.shot && ed.shot.ai;
+    if (!lm || !aiVisible) return;
+    const NS = "http://www.w3.org/2000/svg";
+    AI_CONN.forEach(([i, j]) => {
+      if (!lm[i] || !lm[j]) return;
+      const a = toScreen({ u: lm[i].x, v: lm[i].y }), b = toScreen({ u: lm[j].x, v: lm[j].y });
+      const l = document.createElementNS(NS, "line");
+      l.setAttribute("x1", a.x); l.setAttribute("y1", a.y); l.setAttribute("x2", b.x); l.setAttribute("y2", b.y);
+      svg.appendChild(l);
+    });
+    [LM.nose, LM.lsh, LM.rsh, LM.lhip, LM.rhip, LM.lkn, LM.rkn, LM.lank, LM.rank].forEach((i) => {
+      if (!lm[i]) return;
+      const p = toScreen({ u: lm[i].x, v: lm[i].y }), c = document.createElementNS(NS, "circle");
+      c.setAttribute("cx", p.x); c.setAttribute("cy", p.y); c.setAttribute("r", 5); svg.appendChild(c);
+    });
+  }
+  function drawAiOnCanvas(x) {
+    const lm = ed.shot && ed.shot.ai;
+    if (!lm || !aiVisible) return;
+    x.strokeStyle = "#0a84ff"; x.lineWidth = 3; x.lineCap = "round";
+    AI_CONN.forEach(([i, j]) => {
+      if (!lm[i] || !lm[j]) return;
+      const a = toScreen({ u: lm[i].x, v: lm[i].y }), b = toScreen({ u: lm[j].x, v: lm[j].y });
+      x.beginPath(); x.moveTo(a.x, a.y); x.lineTo(b.x, b.y); x.stroke();
+    });
+    x.fillStyle = "#ffd60a";
+    [LM.nose, LM.lsh, LM.rsh, LM.lhip, LM.rhip, LM.lkn, LM.rkn, LM.lank, LM.rank].forEach((i) => {
+      if (!lm[i]) return;
+      const p = toScreen({ u: lm[i].x, v: lm[i].y });
+      x.beginPath(); x.arc(p.x, p.y, 5, 0, 7); x.fill();
+    });
+  }
+  $("aiRun").onclick = runAi;
+  $("aiToggle").onclick = () => { aiVisible = !aiVisible; renderAi(); toast("edMsg", aiVisible ? "骨格を表示" : "骨格を非表示"); };
+  $("aiClear").onclick = () => {
+    if (!ed.shot) return;
+    delete ed.shot.ai; delete ed.shot.aiText; saveShots(); renderAi(); showAiOut(); toast("edMsg", "解析を消しました");
+  };
+
   function renderMeasure() {
     const svg = $("measureLayer"); if (!svg) return;
     svg.innerHTML = "";
@@ -1134,6 +1270,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         x.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
         x.restore();
         drawGuidesOnCanvas(x, W, H);
+        drawAiOnCanvas(x);
         drawDrawingsOnCanvas(x);
         resolve(c.toDataURL("image/jpeg", 0.85));
       };
