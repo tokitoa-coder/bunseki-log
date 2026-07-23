@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
   <meta name="theme-color" content="#0f5132">
-  <title>分析Log v0.3</title>
+  <title>分析Log</title>
   <style>
 /* ===== 分析Log v0.3 ===== */
 :root{
@@ -289,8 +289,8 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <body>
   <header>
     <div>
-      <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.8 β (r29)</span></h1>
+      <small id="clinicName">いずみ整骨院</small>
+      <h1>分析Log <span>v1.0</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -663,11 +663,18 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <dialog id="dialog">
     <h2>使い方</h2>
     <ol>
-      <li>撮影、または端末の動画を選ぶ</li>
-      <li>止めたい場面で「静止画を追加」</li>
-      <li>画像をタップして中心線・グリッドで編集</li>
-      <li>「Beforeへ」「Afterへ」で比較に反映</li>
+      <li>患者名（管理番号）を入れて「保存」</li>
+      <li>①撮影：全画面カメラで、中心線・水平器に合わせて録画</li>
+      <li>②再生：スロー・コマ送りで場面を選び「静止画に追加」</li>
+      <li>③比較：画像をタップ→編集（中心線・描画・AI解析）</li>
+      <li>「Beforeへ」「Afterへ」で比較。レポートで印刷・PDF化</li>
     </ol>
+    <h2>覚えておくこと</h2>
+    <ul>
+      <li>画像はこの端末の中に保存されます。<b>月1回は「ファイルに書き出す」でバックアップ</b>を。</li>
+      <li>7日以上開かないとデータが消えることがあります。</li>
+      <li>AIの数値は推定です。骨格が体に合っているか確認してからお使いください。</li>
+    </ul>
     <button id="close" class="full">閉じる</button>
   </dialog>
 
@@ -1751,6 +1758,11 @@ OK＝画像も削除する
      レポート（印刷・PDF）とバックアップ
      =======================================================*/
   const CLINIC_DEFAULT = "いずみ整骨院";
+  const applyClinicName = () => {
+    const n = localStorage.al_clinic || CLINIC_DEFAULT;
+    if ($("clinicName")) $("clinicName").textContent = n;
+    if ($("rClinic")) $("rClinic").textContent = n;
+  };
   function openReport() {
     if (!(s.before && s.before.img) && !(s.after && s.after.img)) return toast("memoMsg", "先にBefore/Afterを設定してください");
     $("rClinic").textContent = localStorage.al_clinic || CLINIC_DEFAULT;
@@ -1776,7 +1788,7 @@ OK＝画像も削除する
   $("reportPrint").onclick = () => window.print();
   $("editClinic").onclick = () => {
     const v = prompt("院名を入力してください", localStorage.al_clinic || CLINIC_DEFAULT);
-    if (v !== null) { localStorage.al_clinic = v.trim(); $("rClinic").textContent = v.trim() || CLINIC_DEFAULT; }
+    if (v !== null) { localStorage.al_clinic = v.trim(); applyClinicName(); }
   };
 
   // ---- バックアップ：すべてをファイルへ書き出す ----
@@ -1922,6 +1934,7 @@ OK＝画像も削除する
   setSegmented("record", s.recGrid);
   setLevelBtn();
   drawRecordGuides();
+  applyClinicName();
   updateCompare();
   renderShots();
   initStore();   // 保存済みの静止画を読み込む（旧データも引き継ぎ）
