@@ -259,7 +259,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.8 β (r22)</span></h1>
+      <h1>分析Log <span>v0.8 β (r23)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -1090,14 +1090,15 @@ OK＝画像も削除する
     ed.mode = e.grid || "center";
     ed.vx = e.vx ?? 0.5; ed.hy = e.hy ?? 0.5;
     ed.tx = e.tx ?? 0; ed.ty = e.ty ?? 0; ed.scale = e.scale ?? 1;
-    editImg.onload = () => { ed.nw = editImg.naturalWidth; ed.nh = editImg.naturalHeight; applyTransform(); drawEditGuides(); };
+    editImg.onload = () => { ed.nw = editImg.naturalWidth; ed.nh = editImg.naturalHeight; applyTransform(); drawEditGuides(); if (ed.shot && ed.shot.ai) recomputeAi(); };
     editImg.src = shot.data; // 常に元画像から編集（非破壊）
     if (editImg.complete && editImg.naturalWidth) { ed.nw = editImg.naturalWidth; ed.nh = editImg.naturalHeight; requestAnimationFrame(() => { applyTransform(); drawEditGuides(); }); }
     $("edTitle").textContent = `${s.shots.indexOf(shot) + 1}枚目・${fmtTime(shot.time)}`;
     setSegmented("edit", ed.mode);
     measure.mode = "off"; measure.pts = []; setSegmented("measure", "off"); $("measureOut").textContent = "";
     draw.tool = "off"; draw.cur = null; setSegmented("draw", "off");
-    aiVisible = localStorage.al_ai_show !== "0"; aiEditMode = false; $("aiEdit").classList.remove("on"); updateHint(); renderMeasure(); renderDraw(); renderAi(); showAiOut();
+    aiVisible = localStorage.al_ai_show !== "0"; aiEditMode = false; $("aiEdit").classList.remove("on"); updateHint(); renderMeasure(); renderDraw(); renderAi();
+    if (ed.shot.ai) recomputeAi(); else showAiOut();   // 保存済みの古い文章ではなく、いまの基準で作り直す
     toast("edMsg", "");
     $("editor").hidden = false;
     document.body.style.overflow = "hidden";
@@ -1168,11 +1169,13 @@ OK＝画像も削除する
       const ang = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI), tilt = Math.min(ang, 180 - ang);
       const lower = p[0].v > p[1].v ? p[0] : p[1], higher = p[0].v > p[1].v ? p[1] : p[0];
       const side = lower.u > higher.u ? "右" : "左", drop = Math.abs(dy);
-      const val = pxPerCm > 0 ? (drop / pxPerCm).toFixed(1) + " cm" : Math.round(drop) + " px";
-      out.textContent = `${side}が ${val} 低い（傾き ${tilt.toFixed(1)}°）` + (pxPerCm > 0 ? "" : "　※cmは基準登録後");
+      const pc = effPpc();
+      const val = pc > 0 ? (drop / pc < 1 ? Math.round(drop / pc * 10) + " mm" : (drop / pc).toFixed(1) + " cm") : Math.round(drop) + " px";
+      out.textContent = `${side}が ${val} 低い（傾き ${tilt.toFixed(1)}°）` + (pc > 0 ? "" : "　※cmは「cm基準を登録」後");
     } else if (measure.mode === "dist") {
       const { dx, dy } = natDelta(p[0], p[1]), d = Math.hypot(dx, dy);
-      out.textContent = pxPerCm > 0 ? `距離 ${(d / pxPerCm).toFixed(1)} cm` : `距離 ${Math.round(d)} px　※cmは基準登録後`;
+      const pc2 = effPpc();
+      out.textContent = pc2 > 0 ? `距離 ${d / pc2 < 1 ? Math.round(d / pc2 * 10) + " mm" : (d / pc2).toFixed(1) + " cm"}` : `距離 ${Math.round(d)} px　※cmは「cm基準を登録」後`;
     } else if (measure.mode === "angle") {
       const a = natDelta(p[1], p[0]), b = natDelta(p[1], p[2]);
       const deg = Math.acos(clamp((a.dx * b.dx + a.dy * b.dy) / (Math.hypot(a.dx, a.dy) * Math.hypot(b.dx, b.dy) || 1), -1, 1)) * 180 / Math.PI;
@@ -1180,7 +1183,13 @@ OK＝画像も削除する
     } else if (measure.mode === "scale") {
       const { dx, dy } = natDelta(p[0], p[1]), d = Math.hypot(dx, dy);
       const cm = parseFloat(prompt("この2点の実際の長さ（cm）を入力してください", "10"));
-      if (cm > 0) { pxPerCm = d / cm; localStorage.al_scale = String(pxPerCm); out.textContent = `基準登録：1cm ＝ ${pxPerCm.toFixed(1)}px（以後cm表示）`; recomputeAi(); if (ed.shot) saveShot(ed.shot); }
+      if (cm > 0) {
+        pxPerCm = d / cm; localStorage.al_scale = String(pxPerCm);
+        if (ed.shot) ed.shot.ppc = pxPerCm;
+        out.textContent = `✓ 基準を登録しました（この2点＝${cm}cm）。以後はcm・mmで表示します`;
+        recomputeAi(); if (ed.shot) saveShot(ed.shot);
+        measure.mode = "off"; measure.pts = []; setSegmented("measure", "off"); renderMeasure(); updateHint();
+      }
       else { measure.pts = []; out.textContent = "基準登録をキャンセルしました"; }
     }
   }
@@ -1360,7 +1369,7 @@ OK＝画像も削除する
       // 切り出し範囲の座標 → 画像全体の座標へ戻す
       ed.shot.ai = lm.map((p) => ({ x: cp.u0 + p.x * (cp.u1 - cp.u0), y: cp.v0 + p.y * (cp.v1 - cp.v0), v: p.visibility }));
       const q = aiQuality(ed.shot.ai);
-      const rr = imgRect(); ed.shot.aiText = analyzePose(ed.shot.ai, rr.nw, rr.nh, pxPerCm);
+      const rr = imgRect(); ed.shot.aiText = analyzePose(ed.shot.ai, rr.nw, rr.nh, effPpc());
       if (q < 0.7) ed.shot.aiText.unshift('<span class="warn">⚠ 検出があやしいです。骨格が体と合っているか必ず確認してください（患者さんだけが大きく写るようズームすると改善します）</span>');
       saveShot(ed.shot); aiVisible = true; localStorage.al_ai_show = "1"; showAiOut(); renderAi();
       toast("edMsg", q < 0.7 ? "解析しました（精度が低い可能性あり）" : "解析しました");
@@ -1369,10 +1378,11 @@ OK＝画像も削除する
     }
   }
   // 点を動かしたりcm基準を登録したら、その場で計算し直す
+  const effPpc = () => (ed.shot && ed.shot.ppc > 0 ? ed.shot.ppc : pxPerCm);   // この画像の基準（なければ前回の基準）
   function recomputeAi() {
     if (!(ed.shot && ed.shot.ai)) return;
     const r = imgRect();
-    ed.shot.aiText = analyzePose(ed.shot.ai, r.nw, r.nh, pxPerCm);
+    ed.shot.aiText = analyzePose(ed.shot.ai, r.nw, r.nh, effPpc());
     showAiOut();
   }
   // 一番近い点を探す（つかむ判定）
@@ -1444,7 +1454,8 @@ OK＝画像も削除する
     measure.mode = "scale"; measure.pts = []; setSegmented("measure", "scale");
     aiEditMode = false; $("aiEdit").classList.remove("on"); renderAi();
     $("measureOut").textContent = ""; updateHint();
-    toast("edMsg", "長さが分かる2点をタップしてください（例：身長・机の幅など）");
+    $("measureOut").textContent = "① 長さが分かる2点を画像上でタップ（例：頭のてっぺんと足の裏＝身長）→ ② 実際の長さ(cm)を入力";
+    toast("edMsg", "長さが分かる2点をタップしてください");
   };
   $("aiToggle").onclick = () => { aiVisible = !aiVisible; localStorage.al_ai_show = aiVisible ? "1" : "0"; renderAi(); toast("edMsg", aiVisible ? "骨格を表示（数値の確認用）" : "骨格を非表示（解析の数値はそのまま使えます）"); };
   $("aiClear").onclick = () => {
