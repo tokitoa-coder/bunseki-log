@@ -290,7 +290,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.8 β (r27)</span></h1>
+      <h1>分析Log <span>v0.8 β (r29)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -1233,6 +1233,7 @@ OK＝画像も削除する
     if (measure.pts.length >= need) { measure.pts = []; $("measureOut").textContent = ""; }
     measure.pts.push(toNorm(sx, sy));
     if (measure.pts.length === need) computeMeasure();
+    else $("measureOut").textContent = `${measure.pts.length}点目を置きました（あと${need - measure.pts.length}点タップ）`;
     renderMeasure();
   }
   function computeMeasure() {
@@ -1243,12 +1244,12 @@ OK＝画像も削除する
       const lower = p[0].v > p[1].v ? p[0] : p[1], higher = p[0].v > p[1].v ? p[1] : p[0];
       const side = lower.u > higher.u ? "右" : "左", drop = Math.abs(dy);
       const pc = effPpc();
-      const val = pc > 0 ? (drop / pc < 1 ? Math.round(drop / pc * 10) + " mm" : (drop / pc).toFixed(1) + " cm") : Math.round(drop) + " px";
-      out.textContent = `${side}が ${val} 低い（傾き ${tilt.toFixed(1)}°）` + (pc > 0 ? "" : "　※cmは「cm基準を登録」後");
+      const val = pc > 0 ? (drop / pc < 1 ? " " + Math.round(drop / pc * 10) + "mm " : " " + (drop / pc).toFixed(1) + "cm ") : "";
+      out.textContent = `${side}が${val}低い（傾き ${tilt.toFixed(1)}°）` + (pc > 0 ? "" : "　※長さは「cm基準を登録」後");
     } else if (measure.mode === "dist") {
       const { dx, dy } = natDelta(p[0], p[1]), d = Math.hypot(dx, dy);
       const pc2 = effPpc();
-      out.textContent = pc2 > 0 ? `距離 ${d / pc2 < 1 ? Math.round(d / pc2 * 10) + " mm" : (d / pc2).toFixed(1) + " cm"}` : `距離 ${Math.round(d)} px　※cmは「cm基準を登録」後`;
+      out.textContent = pc2 > 0 ? `距離 ${d / pc2 < 1 ? Math.round(d / pc2 * 10) + " mm" : (d / pc2).toFixed(1) + " cm"}` : "距離を出すには「cm基準を登録」を先に行ってください";
     } else if (measure.mode === "angle") {
       const a = natDelta(p[1], p[0]), b = natDelta(p[1], p[2]);
       const deg = Math.acos(clamp((a.dx * b.dx + a.dy * b.dy) / (Math.hypot(a.dx, a.dy) * Math.hypot(b.dx, b.dy) || 1), -1, 1)) * 180 / Math.PI;
@@ -1259,7 +1260,10 @@ OK＝画像も削除する
       out.textContent = "この2点の実際の長さを下の欄に入力してください";
       $("scaleInput").hidden = false;
       $("scaleCm").value = "";
-      setTimeout(() => { try { $("scaleCm").focus(); } catch (e) {} }, 50);
+      setTimeout(() => {
+        try { $("scaleInput").scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {}
+        try { $("scaleCm").focus(); } catch (e) {}
+      }, 60);
     }
   }
   /* ---- 描画ツール（自由線・直線・水平・垂直・矢印・円・文字） ---- */
@@ -1353,11 +1357,12 @@ OK＝画像も削除する
   // 解析の計算部（純粋関数：landmarksから所見の文字列を作る）
   function analyzePose(lm, nw, nh, ppc) {
     const P = (i) => ({ x: lm[i].x * nw, y: lm[i].y * nh });
+    const hasScale = ppc > 0;
     const val = (px) => {
-      if (!(ppc > 0)) return Math.round(px) + "px";
       const cm = px / ppc;
       return cm < 1 ? Math.round(cm * 10) + "mm" : cm.toFixed(1) + "cm";
     };
+    const amt = (px) => (hasScale ? " " + val(px) + " " : "");   // 基準がなければ長さは書かない
     const tiltOf = (a, b) => { const d = Math.abs(Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI); return Math.min(d, 180 - d); };
     const angAt = (a, v, b) => {
       const p = { x: a.x - v.x, y: a.y - v.y }, q = { x: b.x - v.x, y: b.y - v.y };
@@ -1368,26 +1373,28 @@ OK＝画像も削除する
     const rightOnLeftSide = rsh.x < lsh.x;
     const sideByX = (dx) => (dx < 0 ? (rightOnLeftSide ? "右" : "左") : (rightOnLeftSide ? "左" : "右"));
     const out = [];
-    const flat = (px) => px < (ppc > 0 ? ppc * 0.2 : 8); // ごく僅かな差は「ほぼ水平」扱い
+    const flat = (px) => px < (hasScale ? ppc * 0.2 : nh * 0.004); // ごく僅かな差は「ほぼ水平」扱い
     // 肩の高さ
     const shDrop = Math.abs(rsh.y - lsh.y), shLow = rsh.y > lsh.y ? "右" : "左";
-    out.push(`<b>肩の高さ</b>：` + (flat(shDrop) ? "ほぼ水平" : `${shLow}肩が ${val(shDrop)} 低い`) + `（傾き ${tiltOf(lsh, rsh).toFixed(1)}°）`);
+    out.push(`<b>肩の高さ</b>：` + (flat(shDrop) ? "ほぼ水平" : `${shLow}肩が${amt(shDrop)}低い`) + `（傾き ${tiltOf(lsh, rsh).toFixed(1)}°）`);
     // 骨盤
     const hipDrop = Math.abs(rhip.y - lhip.y), hipLow = rhip.y > lhip.y ? "右" : "左";
-    out.push(`<b>骨盤の傾き</b>：` + (flat(hipDrop) ? "ほぼ水平" : `${hipLow}が ${val(hipDrop)} 低い`) + `（傾き ${tiltOf(lhip, rhip).toFixed(1)}°）`);
+    out.push(`<b>骨盤の傾き</b>：` + (flat(hipDrop) ? "ほぼ水平" : `${hipLow}が${amt(hipDrop)}低い`) + `（傾き ${tiltOf(lhip, rhip).toFixed(1)}°）`);
     // 体幹の傾き（肩の中心 vs 骨盤の中心）
     const shMid = { x: (lsh.x + rsh.x) / 2, y: (lsh.y + rsh.y) / 2 }, hipMid = { x: (lhip.x + rhip.x) / 2, y: (lhip.y + rhip.y) / 2 };
     const trunkDx = shMid.x - hipMid.x, trunkDeg = Math.abs(Math.atan2(trunkDx, hipMid.y - shMid.y) * 180 / Math.PI);
     out.push(`<b>体幹の傾き</b>：` + (trunkDeg < 1 ? "ほぼ垂直" : `${sideByX(trunkDx)}へ ${trunkDeg.toFixed(1)}°`));
     // 頭部位置（鼻が肩の中心からどれだけ横にずれているか）
     const nose = P(LM.nose), headDx = nose.x - shMid.x;
-    out.push(`<b>頭の位置</b>：` + (flat(Math.abs(headDx)) ? "ほぼ中心" : `${sideByX(headDx)}へ ${val(Math.abs(headDx))} ずれ`));
+    out.push(`<b>頭の位置</b>：` + (flat(Math.abs(headDx)) ? "ほぼ中心" : `${sideByX(headDx)}へ${amt(Math.abs(headDx))}ずれ`));
     // 膝の角度
     const kneeR = angAt(P(LM.rhip), P(LM.rkn), P(LM.rank)), kneeL = angAt(P(LM.lhip), P(LM.lkn), P(LM.lank));
     out.push(`<b>膝の角度</b>：右 ${kneeR.toFixed(0)}° ／ 左 ${kneeL.toFixed(0)}°（差 ${Math.abs(kneeR - kneeL).toFixed(0)}°）`);
     // 左右差まとめ
-    out.push(`<b>左右差まとめ</b>：肩 ${val(shDrop)}／骨盤 ${val(hipDrop)}／膝 ${Math.abs(kneeR - kneeL).toFixed(0)}°`);
-    if (!(ppc > 0)) out.push('<span class="note">※cm表示にするには「基準登録」で長さの基準を1回登録してください</span>');
+    out.push(`<b>左右差まとめ</b>：` + (hasScale
+      ? `肩 ${val(shDrop)}／骨盤 ${val(hipDrop)}／膝 ${Math.abs(kneeR - kneeL).toFixed(0)}°`
+      : `肩 ${tiltOf(lsh, rsh).toFixed(1)}°／骨盤 ${tiltOf(lhip, rhip).toFixed(1)}°／膝 ${Math.abs(kneeR - kneeL).toFixed(0)}°`));
+    if (!hasScale) out.push('<span class="note">※いまは角度のみ表示中。長さ（cm）も出すには「cm基準を登録」を1回行ってください</span>');
     out.push('<span class="note">※AIによる推定値です。診断ではなく、説明の目安としてお使いください</span>');
     return out;
   }
@@ -1472,7 +1479,7 @@ OK＝画像も削除する
     const ref = (ed.shot && ed.shot.ppcCm) || localStorage.al_scale_cm;
     $("scaleState").textContent = pc > 0
       ? `cm基準：登録済み ✓ cm・mmで表示中${ref ? `（${ref}cmで設定）` : ""}`
-      : "cm基準：未登録（いまは px 表示）";
+      : "cm基準：未登録（いまは角度のみ表示）";
     bar.classList.toggle("on", pc > 0);
     $("scaleClear").hidden = !(pc > 0);
   }
@@ -1616,7 +1623,9 @@ OK＝画像も削除する
     if (gesture && gesture.type === "pinch") return doPinch(r);
     if (!gesture) return;
     const lx = e.clientX - r.left, ly = e.clientY - r.top;
-    if (Math.abs(lx - gesture.lx) > 4 || Math.abs(ly - gesture.ly) > 4) gesture.moved = true;
+    const mv = Math.hypot(lx - gesture.lx, ly - gesture.ly);
+    gesture.maxMove = Math.max(gesture.maxMove || 0, mv);
+    if (mv > 4) gesture.moved = true;
     if (gesture.type === "lm") {
       const p = toNorm(lx, ly);
       ed.shot.ai[gesture.i] = { x: clamp(p.u, 0, 1), y: clamp(p.v, 0, 1), v: 1 };
@@ -1651,7 +1660,8 @@ OK＝画像も削除する
     if (gesture && gesture.type === "lm") { if (ed.shot) saveShot(ed.shot); }
     else if (gesture && gesture.type === "draw") { drawEnd(); }
     else if (gesture && gesture.type === "measure") {
-      if (!gesture.moved && Date.now() - gesture.t < 300 && pointers.size === 0) placePoint(gesture.lx, gesture.ly);
+      if ((gesture.maxMove || 0) <= 14 && pointers.size === 0) placePoint(gesture.lx, gesture.ly);   // ゆっくり押しても有効
+      else if (pointers.size === 0) $("measureOut").textContent = "指が動きすぎました。もう一度、点をそっとタップしてください";
     } else if (gesture && gesture.type !== "pinch" && !gesture.moved && Date.now() - gesture.t < 250 && pointers.size === 0) {
       const now = Date.now();
       if (now - lastTap < 300) { resetView(); lastTap = 0; } else lastTap = now;   // ダブルタップでリセット（測定・描画中は無効）
