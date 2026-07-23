@@ -284,13 +284,25 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .histEmpty{color:#9db3a6;text-align:center;padding:30px 10px}
 .histBadge{display:inline-block;background:var(--green);color:#fff;border-radius:6px;font-size:10px;padding:1px 6px;margin-left:4px}
 
+/* 患者名簿 */
+.patientsView{position:fixed;inset:0;z-index:21;background:#0b120e;color:#fff;display:flex;flex-direction:column}
+.patientsView[hidden]{display:none}
+.patientsView .histPick input{background:#1b2a21;color:#fff;border-color:#2b3d33}
+.pRow{display:flex;align-items:center;gap:10px;background:#12241a;border:1px solid #24352b;border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.pRow .pThumb{width:52px;height:52px;flex:0 0 auto;border-radius:8px;object-fit:cover;background:#000}
+.pRow .pInfo{flex:1;min-width:0}
+.pRow .pName{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pRow .pSub{font-size:12px;color:#9db3a6;margin-top:2px}
+.pRow .pGo{flex:0 0 auto;min-height:40px;padding:8px 12px;font-size:13px}
+.pRow.cur{border-color:var(--green);box-shadow:0 0 0 1px var(--green)}
+
 </style>
 </head>
 <body>
   <header>
     <div>
       <small id="clinicName">いずみ整骨院</small>
-      <h1>分析Log <span>v1.0</span></h1>
+      <h1>分析Log <span>v1.1</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -304,6 +316,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         <button id="savePatient">保存</button>
       </div>
       <datalist id="patientList"></datalist>
+      <button id="openPatients" class="full">📇 登録した患者から選ぶ</button>
       <div class="grid">
         <button id="renamePatient" class="sub">名前を変更</button>
         <button id="deletePatient" class="sub">名前を削除</button>
@@ -425,6 +438,19 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <button id="capture2" class="full big">■ この場面を切り出し</button>
       <p id="play2Msg" class="msg"></p>
     </div>
+  </div>
+
+  <!-- 患者名簿 -->
+  <div id="patientsView" class="patientsView" hidden>
+    <div class="editorBar top">
+      <button id="patientsClose" class="sub">閉じる</button>
+      <span>患者を選ぶ</span>
+      <span id="patientsCount" class="time"></span>
+    </div>
+    <div class="histPick">
+      <input id="patientSearch" type="search" placeholder="名前・番号で絞り込み" autocomplete="off">
+    </div>
+    <div id="patientsBody" class="histBody"></div>
   </div>
 
   <!-- 患者履歴 -->
@@ -1922,6 +1948,68 @@ OK＝画像も削除する
   $("openHistory").onclick = openHistory;
   $("historyClose").onclick = () => { $("historyView").hidden = true; document.body.style.overflow = ""; };
   $("histPatient").onchange = renderHistory;
+
+  /* =======================================================
+     患者を呼び出す（登録した患者の一覧）
+     =======================================================*/
+  function patientSummary() {
+    // 名簿と、静止画に付いている名前をまとめて集計する
+    const map = new Map();
+    patients.filter(Boolean).forEach((n) => map.set(n, { name: n, count: 0, last: 0, thumb: "" }));
+    s.shots.forEach((sh) => {
+      const n = (sh.patient || "").trim();
+      if (!n) return;
+      if (!map.has(n)) map.set(n, { name: n, count: 0, last: 0, thumb: "" });
+      const r = map.get(n);
+      r.count++;
+      if ((sh.date || 0) >= r.last) { r.last = sh.date || 0; r.thumb = sh.edited || sh.data; }
+    });
+    return [...map.values()].sort((a, b) => (b.last - a.last) || a.name.localeCompare(b.name, "ja"));
+  }
+  function renderPatients() {
+    const body = $("patientsBody"), q = ($("patientSearch").value || "").trim();
+    const cur = ($("patient").value || "").trim();
+    let list = patientSummary();
+    if (q) list = list.filter((p) => p.name.includes(q));
+    $("patientsCount").textContent = list.length + "名";
+    body.innerHTML = "";
+    if (!list.length) {
+      body.innerHTML = `<p class="histEmpty">${q ? "見つかりませんでした。" : "まだ患者が登録されていません。<br>患者名を入れて「保存」すると、ここに並びます。"}</p>`;
+      return;
+    }
+    list.forEach((p) => {
+      const row = document.createElement("div");
+      row.className = "pRow" + (p.name === cur ? " cur" : "");
+      row.innerHTML =
+        (p.thumb ? `<img class="pThumb" src="${p.thumb}" alt="">` : `<div class="pThumb"></div>`) +
+        `<div class="pInfo"><div class="pName">${p.name}</div>` +
+        `<div class="pSub">${p.count}枚${p.last ? "・最終 " + fmtDate(p.last) : ""}</div></div>` +
+        `<button class="pGo sub">履歴</button>`;
+      // 行をタップ：この患者を選ぶ
+      row.onclick = () => {
+        $("patient").value = p.name; localStorage.al_patient = p.name;
+        addPatient(p.name); renderShots();
+        $("patientsView").hidden = true; document.body.style.overflow = "";
+        toast("patientMsg", `「${p.name}」を呼び出しました`);
+      };
+      // 「履歴」：そのまま履歴画面へ
+      row.querySelector(".pGo").onclick = (e) => {
+        e.stopPropagation();
+        $("patient").value = p.name; localStorage.al_patient = p.name;
+        addPatient(p.name); renderShots();
+        $("patientsView").hidden = true;
+        openHistory();
+      };
+      body.appendChild(row);
+    });
+  }
+  $("openPatients").onclick = () => {
+    $("patientSearch").value = "";
+    renderPatients();
+    $("patientsView").hidden = false; document.body.style.overflow = "hidden";
+  };
+  $("patientsClose").onclick = () => { $("patientsView").hidden = true; document.body.style.overflow = ""; };
+  $("patientSearch").addEventListener("input", renderPatients);
 
   /* ---- ダイアログ・初期化 ---- */
   const dialog = $("dialog");
