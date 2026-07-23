@@ -266,13 +266,31 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .scaleInput button{flex:0 0 auto;min-height:44px}
 .scaleInput .hint{color:#9db3a6;margin:6px 0 0}
 
+/* 患者履歴 */
+.historyView{position:fixed;inset:0;z-index:21;background:#0b120e;color:#fff;display:flex;flex-direction:column}
+.historyView[hidden]{display:none}
+.histPick{padding:10px 12px;background:#0f1a13;border-bottom:1px solid #24352b}
+.histPick select{background:#1b2a21;color:#fff;border-color:#2b3d33}
+.histBody{flex:1;min-height:0;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch}
+.histDay{margin-bottom:18px}
+.histDate{position:sticky;top:-12px;background:#0b120e;padding:6px 0;font-weight:700;color:#7fd6a3;font-size:14px;border-bottom:1px solid #24352b;margin-bottom:8px}
+.histDate span{color:#9db3a6;font-weight:400;font-size:12px;margin-left:6px}
+.histRow{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.histItem{background:#12241a;border:1px solid #24352b;border-radius:12px;padding:8px}
+.histItem img{width:100%;height:150px;object-fit:contain;background:#000;border-radius:8px;display:block;cursor:pointer}
+.histItem .t{font-size:11px;color:#9db3a6;margin:6px 0 6px;text-align:center}
+.histItem .bs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.histItem .bs button{min-height:36px;padding:6px;font-size:12px}
+.histEmpty{color:#9db3a6;text-align:center;padding:30px 10px}
+.histBadge{display:inline-block;background:var(--green);color:#fff;border-radius:6px;font-size:10px;padding:1px 6px;margin-left:4px}
+
 </style>
 </head>
 <body>
   <header>
     <div>
       <small>いずみ整骨院・試作版</small>
-      <h1>分析Log <span>v0.8 β (r25)</span></h1>
+      <h1>分析Log <span>v0.8 β (r26)</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -357,6 +375,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <button id="swap" class="sub full">左右を入れ替える</button>
       <button id="openCompareFS" class="full big">⛶ 全画面で比較する</button>
       <button id="openReport" class="full big">📄 レポートを作る（印刷・PDF）</button>
+      <button id="openHistory" class="full big">📁 患者の履歴を見る</button>
       <label for="memo">所見メモ
         <textarea id="memo" rows="5" placeholder="例：右肩の挙上が改善"></textarea>
       </label>
@@ -406,6 +425,20 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <button id="capture2" class="full big">■ この場面を切り出し</button>
       <p id="play2Msg" class="msg"></p>
     </div>
+  </div>
+
+  <!-- 患者履歴 -->
+  <div id="historyView" class="historyView" hidden>
+    <div class="editorBar top">
+      <button id="historyClose" class="sub">閉じる</button>
+      <span>患者の履歴</span>
+      <span id="historyCount" class="time"></span>
+    </div>
+    <div class="histPick">
+      <select id="histPatient" aria-label="患者を選ぶ"></select>
+    </div>
+    <div id="histBody" class="histBody"></div>
+    <p class="hint fsHint">画像をタップ → Before / After に設定できます</p>
   </div>
 
   <!-- レポート（印刷・PDF） -->
@@ -1725,7 +1758,7 @@ OK＝画像も削除する
   };
 
   // ---- バックアップ：すべてをファイルへ書き出す ----
-  $("exportAll").onclick = () => {
+  $("exportAll").onclick = async () => {
     try {
       toast("backupMsg", "書き出しを準備しています…");
       const data = {
@@ -1734,12 +1767,25 @@ OK＝画像も削除する
         memo: localStorage.al_memo || "", scale: localStorage.al_scale || "",
         before: s.before || null, after: s.after || null, shots: s.shots,
       };
-      const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
+      const json = JSON.stringify(data);
       const d = new Date(), p = (n) => String(n).padStart(2, "0");
+      const name = `分析Log_バックアップ_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
+      const blob = new Blob([json], { type: "application/json" });
+      // iPhone/iPadの共有メニューが使えるならそちら（iCloud Drive・AirDrop・メールが選べる）
+      try {
+        const file = new File([blob], name, { type: "application/json" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: "分析Log バックアップ" });
+          toast("backupMsg", `静止画 ${s.shots.length}枚を書き出しました`);
+          return;
+        }
+      } catch (shareErr) {
+        if (shareErr && shareErr.name === "AbortError") { toast("backupMsg", "書き出しを中止しました"); return; }
+      }
+      // 使えない場合は通常のダウンロード
+      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = `分析Log_バックアップ_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
-      a.click();
+      a.href = url; a.download = name; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 20000);
       toast("backupMsg", `静止画 ${s.shots.length}枚を書き出しました`);
     } catch (e) { toast("backupMsg", "書き出せませんでした：" + e.message); }
@@ -1775,6 +1821,73 @@ OK＝画像も削除する
       toast("backupMsg", `${added}枚を読み込みました（重複 ${d.shots.length - added}枚は追加せず）`);
     } catch (err) { toast("backupMsg", "読み込めませんでした：" + err.message); }
   };
+
+  /* =======================================================
+     患者の履歴（日付ごとに並べる）
+     =======================================================*/
+  function openHistory() {
+    if (!s.shots.length) return toast("memoMsg", "まだ静止画がありません");
+    const sel = $("histPatient"), cur = ($("patient").value || "").trim();
+    const names = [...new Set(s.shots.map((x) => (x.patient || "").trim()))];
+    sel.innerHTML = "";
+    const optAll = document.createElement("option"); optAll.value = "__all__"; optAll.textContent = "すべての患者"; sel.appendChild(optAll);
+    names.sort().forEach((n) => {
+      const o = document.createElement("option");
+      o.value = n; o.textContent = n || "（名前なし）";
+      sel.appendChild(o);
+    });
+    sel.value = cur && names.includes(cur) ? cur : "__all__";
+    renderHistory();
+    $("historyView").hidden = false; document.body.style.overflow = "hidden";
+  }
+  function renderHistory() {
+    const sel = $("histPatient").value, body = $("histBody");
+    const list = s.shots.filter((x) => sel === "__all__" || (x.patient || "").trim() === sel);
+    $("historyCount").textContent = list.length + "枚";
+    body.innerHTML = "";
+    if (!list.length) { body.innerHTML = '<p class="histEmpty">この患者の静止画はありません。</p>'; return; }
+    // 日付ごとにまとめる（新しい日が上）
+    const days = new Map();
+    [...list].sort((a, b) => (b.date || 0) - (a.date || 0)).forEach((sh) => {
+      const d = sh.date ? new Date(sh.date) : null;
+      const key = d ? `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}` : "日付なし";
+      if (!days.has(key)) days.set(key, []);
+      days.get(key).push(sh);
+    });
+    const week = ["日", "月", "火", "水", "木", "金", "土"];
+    days.forEach((items, key) => {
+      const wrap = document.createElement("div"); wrap.className = "histDay";
+      const d = items[0].date ? new Date(items[0].date) : null;
+      const head = document.createElement("div"); head.className = "histDate";
+      head.innerHTML = `${key}${d ? `（${week[d.getDay()]}）` : ""}<span>${items.length}枚</span>`;
+      wrap.appendChild(head);
+      const row = document.createElement("div"); row.className = "histRow";
+      items.forEach((sh) => {
+        const cell = document.createElement("div"); cell.className = "histItem";
+        const t = sh.date ? new Date(sh.date) : null;
+        const isB = s.before && s.before.shotId === sh.id, isA = s.after && s.after.shotId === sh.id;
+        cell.innerHTML =
+          `<img src="${sh.edited || sh.data}" alt="">` +
+          `<p class="t">${t ? pad(t.getHours()) + ":" + pad(t.getMinutes()) : ""}` +
+          `${sel === "__all__" && sh.patient ? " " + sh.patient : ""}` +
+          `${isB ? '<span class="histBadge">Before</span>' : ""}${isA ? '<span class="histBadge">After</span>' : ""}</p>` +
+          `<div class="bs"><button data-h="before">Before</button><button data-h="after">After</button></div>`;
+        cell.querySelector("img").onclick = () => { $("historyView").hidden = true; document.body.style.overflow = ""; openEditor(sh); };
+        cell.querySelectorAll("button").forEach((b) => {
+          b.onclick = () => {
+            const slot = { img: sh.edited || sh.data, date: sh.date, time: sh.time, ai: sh.aiText || null, patient: sh.patient || "", shotId: sh.id };
+            if (b.dataset.h === "before") { s.before = slot; saveSlot("before"); } else { s.after = slot; saveSlot("after"); }
+            updateCompare(); renderHistory();
+          };
+        });
+        row.appendChild(cell);
+      });
+      wrap.appendChild(row); body.appendChild(wrap);
+    });
+  }
+  $("openHistory").onclick = openHistory;
+  $("historyClose").onclick = () => { $("historyView").hidden = true; document.body.style.overflow = ""; };
+  $("histPatient").onchange = renderHistory;
 
   /* ---- ダイアログ・初期化 ---- */
   const dialog = $("dialog");
