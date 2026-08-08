@@ -302,7 +302,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small id="clinicName">いずみ整骨院</small>
-      <h1>分析Log <span>v1.1</span></h1>
+      <h1>分析Log <span>v1.2</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -765,6 +765,32 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   }
   const saveShots = () => { if (!useIDB) saveShotsLS(); };  // 一覧全体（旧方式のとき用）
 
+  // 保存領域を「消えにくく」する要求 ＆ 空き容量チェック
+  async function ensurePersistentStorage() {
+    try {
+      if (navigator.storage && navigator.storage.persist) {
+        const already = navigator.storage.persisted ? await navigator.storage.persisted() : false;
+        if (!already) await navigator.storage.persist();   // iOSでは効かないこともあるが害はない
+      }
+    } catch (e) {}
+  }
+  let lastQuotaWarn = 0;
+  async function checkStorage(showOk) {
+    try {
+      if (!(navigator.storage && navigator.storage.estimate)) { if (showOk) toast("backupMsg", "この端末では空き容量を確認できません"); return; }
+      const est = await navigator.storage.estimate();
+      const used = est.usage || 0, quota = est.quota || 0;
+      const mb = (n) => (n / 1048576).toFixed(0);
+      const ratio = quota ? used / quota : 0;
+      if (ratio >= 0.8 && Date.now() - lastQuotaWarn > 60000) {
+        lastQuotaWarn = Date.now();
+        toast("reviewMsg", `⚠ 保存容量が残りわずかです（使用 ${mb(used)}MB / 上限 ${mb(quota)}MB）。バックアップを書き出して、古い静止画を削除してください。`);
+      }
+      if (showOk) toast("backupMsg", `使用容量：${mb(used)}MB${quota ? " / 目安上限 " + mb(quota) + "MB" : ""}（静止画 ${s.shots.length}枚）`);
+      return { used, quota, ratio };
+    } catch (e) { if (showOk) toast("backupMsg", "容量を確認できませんでした"); }
+  }
+
   async function initStore() {
     try {
       if (!window.indexedDB) throw new Error("no idb");
@@ -784,6 +810,8 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     }
     s.shots.forEach((sh) => { if (sh.patient) addPatient(sh.patient); });   // 既存の名前を名簿に取り込む
     renderShots();
+    ensurePersistentStorage();
+    checkStorage(false);
   }
 
   // ---- タブ切替 ----
@@ -950,16 +978,40 @@ OK＝画像も削除する
   async function stopStream() { if (s.stream) s.stream.getTracks().forEach((t) => t.stop()); }
   function openCamView() { $("camView").hidden = false; document.body.style.overflow = "hidden"; drawRecordGuides(); }
   function closeCamView() { $("camView").hidden = true; document.body.style.overflow = ""; }
+  function cameraErrorMessage(e) {
+    const n = (e && e.name) || "";
+    if (n === "NotAllowedError" || n === "SecurityError")
+      return "カメラの使用が許可されていません。設定 → Safari → カメラ を「許可」にするか、アドレスバーの「ぁあ」からWebサイト設定でカメラを許可してください。";
+    if (n === "NotFoundError" || n === "OverconstrainedError")
+      return "カメラが見つかりませんでした。前後カメラを切り替えて、もう一度お試しください。";
+    if (n === "NotReadableError")
+      return "カメラを別のアプリが使用中の可能性があります。他のカメラアプリを閉じてから、もう一度お試しください。";
+    if (window.location && window.location.protocol !== "https:")
+      return "この画面は安全な接続（https）でないためカメラを使えません。正しいURLで開き直してください。";
+    return "カメラを起動できませんでした。ページを再読み込みしてお試しください。（" + (n || (e && e.message) || "不明") + "）";
+  }
   async function startCamera() {
+    $("recordMsg").textContent = "";
     try {
       await stopStream();
-      s.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: s.facing } }, audio: true });
+      s.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: s.facing } }, audio: false });
       $("camera").srcObject = s.stream;
       $("startRec").disabled = false; $("stopRec").disabled = true;
       $("cameraMsg").textContent = "中心線・グリッド・水平器に身体を合わせてください";
       setTimeout(() => { $("cameraMsg").textContent = ""; }, 2500);
       openCamView();
-    } catch (e) { toast("recordMsg", "カメラを起動できません：" + e.message); }
+    } catch (e) {
+      const msg = cameraErrorMessage(e);
+      toast("recordMsg", msg);
+      // 再試行ボタンを出す
+      const rm = $("recordMsg");
+      if (rm && !$("retryCamera")) {
+        const b = document.createElement("button");
+        b.id = "retryCamera"; b.className = "sub full"; b.textContent = "🔄 もう一度カメラを起動";
+        b.onclick = () => { b.remove(); startCamera(); };
+        rm.insertAdjacentElement("afterend", b);
+      }
+    }
   }
   $("startCamera").onclick = startCamera;
   $("switchCamera").onclick = async () => { s.facing = s.facing === "environment" ? "user" : "environment"; await startCamera(); };
@@ -1022,6 +1074,7 @@ OK＝画像も削除する
     const shot = { id: Date.now() + Math.random(), data: c.toDataURL("image/jpeg", 0.85), time: v.currentTime, date: Date.now(), patient: ($("patient").value || "") };
     s.shots.push(shot);
     saveShot(shot); renderShots();   // 自動保存
+    checkStorage(false);
     const msg = `③比較の下に自動保存しました（全${s.shots.length}枚）`;
     toast("reviewMsg", msg); toast("play2Msg", msg);
   }
