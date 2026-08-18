@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f5132">
   <title>分析Log</title>
   <style>
-/* ===== 分析Log v0.3 ===== */
+/* ===== 分析Log v1.3 ===== */
 :root{
   --green:#0f5132;
   --green-soft:#e6efe9;
@@ -155,6 +155,49 @@ nav#tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:
 .shotBtns .editBtn{grid-column:1/-1;background:var(--green)}
 .shotBtns .delete{grid-column:1/-1;background:#f4e7e5;color:#a52b23}
 
+/* 保存動画 */
+.videoHead{display:flex;justify-content:space-between;align-items:center;margin-top:22px}
+.videoList{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:8px}
+.videoCard{border:1px solid var(--line);border-radius:14px;padding:10px;background:#f9fbfa;min-width:0}
+.videoCard.onBefore{box-shadow:inset 4px 0 0 #0a84ff}
+.videoCard.onAfter{box-shadow:inset -4px 0 0 #ff7a00}
+.videoIcon{height:72px;border-radius:10px;background:#102219;color:#d8f2e2;display:grid;place-items:center;font-size:30px;margin-bottom:7px}
+.videoMeta{margin:0 0 8px;font-size:12px;line-height:1.6;color:var(--muted);word-break:break-word}
+.videoMeta .who{color:var(--green);font-weight:700}
+.videoBadges{min-height:20px;margin-bottom:5px}
+.videoBadge{display:inline-block;border-radius:999px;padding:2px 7px;margin-right:4px;background:var(--green-soft);color:var(--green);font-size:10px;font-weight:700}
+.videoBadge.before{background:#e7f1ff;color:#075fb5}
+.videoBadge.after{background:#fff0e2;color:#a54a00}
+.videoBtns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.videoBtns button{min-height:36px;padding:6px;font-size:12px}
+.videoBtns .loadVideo{grid-column:1/-1}
+.videoBtns .deleteVideo{background:#f4e7e5;color:#a52b23}
+
+/* 動画 Before / After 同期比較 */
+.videoCompareBlock{margin-top:24px;padding-top:18px;border-top:2px solid var(--line)}
+.videoCompareStage{background:#0b120e;border-radius:16px;padding:10px;color:#fff;margin-top:8px}
+.videoPair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.videoPane{min-width:0}
+.videoPane h3{text-align:center;color:#d8f2e2;font-size:13px;margin:0 0 6px}
+.videoPane h3 span{display:block;color:#7fd6a3;font-size:10px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.videoFrame{position:relative;aspect-ratio:3/4;background:#000;border-radius:10px;overflow:hidden;display:grid;place-items:center}
+.videoFrame video{width:100%;height:100%;object-fit:contain;display:none}
+.videoFrame .videoEmpty{color:#6b7d72;font-size:12px;text-align:center;padding:8px}
+.videoCmpControls{padding-top:10px}
+.videoSeek{display:flex;align-items:center;gap:8px;color:#cfe6d8;font-size:12px;font-variant-numeric:tabular-nums}
+.videoSeek input{padding:0;border:0;background:transparent;flex:1}
+.videoCmpRow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:8px}
+.videoCmpRow button,.videoCmpRow select{min-height:42px;padding:8px;font-size:13px}
+.videoCmpRow .playSync{background:var(--green);color:#fff;font-weight:700;border:0;border-radius:12px}
+.videoCmpNote{text-align:center;color:#9db3a6;font-size:11px;margin:7px 0 0}
+.videoCompareView{position:fixed;inset:0;z-index:23;background:#0b120e;color:#fff;display:flex;flex-direction:column}
+.videoCompareView[hidden]{display:none}
+.videoCompareFullHost{flex:1;min-height:0;display:flex}
+.videoCompareView .videoCompareStage{flex:1;min-height:0;margin:0;border-radius:0;display:flex;flex-direction:column}
+.videoCompareView .videoPair{flex:1;min-height:0}
+.videoCompareView .videoPane{display:flex;min-height:0;flex-direction:column}
+.videoCompareView .videoFrame{flex:1;min-height:0;aspect-ratio:auto}
+
 .compare{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .compare h3{text-align:center;margin-bottom:6px}
 .photo{aspect-ratio:3/4;background:#eef1ef;border-radius:14px;display:grid;place-items:center;overflow:hidden;margin-bottom:8px}
@@ -211,6 +254,8 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   .stage{aspect-ratio:16/9}
   .grid{grid-template-columns:repeat(4,1fr)}
   .shots{grid-template-columns:repeat(4,1fr)}
+  .videoList{grid-template-columns:repeat(3,1fr)}
+  .videoFrame{aspect-ratio:16/9}
   .editorTools{max-width:900px;margin:0 auto;width:100%}
 }
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
@@ -302,7 +347,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <header>
     <div>
       <small id="clinicName">いずみ整骨院</small>
-      <h1>分析Log <span>v1.2</span></h1>
+      <h1>分析Log <span>v1.3</span></h1>
     </div>
     <button id="help" class="sub">使い方</button>
   </header>
@@ -365,6 +410,18 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <button id="captureBtn" class="full">この場面を静止画に追加</button>
       <canvas id="canvas" hidden></canvas>
       <p id="reviewMsg" class="msg"></p>
+
+      <div class="videoHead">
+        <h3>保存した動画</h3>
+        <span id="videoCount" class="pill">0本</span>
+      </div>
+      <p class="hint">撮影した動画と端末から選んだ動画は、自動でこの端末に保存されます。「読込」で再生・静止画切り出し、「Before／After」で動画比較に設定できます。</p>
+      <label class="filterRow"><input type="checkbox" id="filterVideoPatient"> 上の患者名と一致する動画だけ表示</label>
+      <div id="videoList" class="videoList"></div>
+      <button id="goVideoCompare" class="full big">③ 動画比較を開く</button>
+      <button id="clearVideos" class="sub full">保存動画をすべて削除</button>
+      <p id="videoMsg" class="msg"></p>
+      <p class="hint">動画は容量が大きいため、JSONバックアップには含まれません。大切な動画は一覧の「端末保存」からファイルにも残してください。</p>
     </section>
 
     <!-- ③ 比較 -->
@@ -389,6 +446,57 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <button id="openCompareFS" class="full big">⛶ 全画面で比較する</button>
       <button id="openReport" class="full big">📄 レポートを作る（印刷・PDF）</button>
       <button id="openHistory" class="full big">📁 患者の履歴を見る</button>
+
+      <div class="videoCompareBlock">
+        <h2>動画 Before / After</h2>
+        <p>「保存した動画」のBefore／Afterを同じタイミングで再生できます。速度変更や1コマ送りも左右同時です。</p>
+        <div id="videoCompareHome">
+          <div id="videoCompareStage" class="videoCompareStage">
+            <div class="videoPair">
+              <div class="videoPane">
+                <h3>Before <span id="videoBeforeCap">未設定</span></h3>
+                <div class="videoFrame">
+                  <video id="videoBefore" muted playsinline preload="metadata"></video>
+                  <span id="videoBeforeEmpty" class="videoEmpty">保存動画から<br>Beforeを選択</span>
+                </div>
+              </div>
+              <div class="videoPane">
+                <h3>After <span id="videoAfterCap">未設定</span></h3>
+                <div class="videoFrame">
+                  <video id="videoAfter" muted playsinline preload="metadata"></video>
+                  <span id="videoAfterEmpty" class="videoEmpty">保存動画から<br>Afterを選択</span>
+                </div>
+              </div>
+            </div>
+            <div class="videoCmpControls">
+              <div class="videoSeek">
+                <span id="videoCompareNow">0:00.00</span>
+                <input id="videoCompareSeek" type="range" min="0" max="1000" value="0" aria-label="動画の再生位置">
+                <span id="videoCompareEnd">0:00.00</span>
+              </div>
+              <div class="videoCmpRow">
+                <button id="videoCompareBack" class="sub">◀ 1コマ</button>
+                <button id="videoComparePlay" class="playSync">▶ 同期再生</button>
+                <button id="videoCompareForward" class="sub">1コマ ▶</button>
+              </div>
+              <div class="videoCmpRow">
+                <select id="videoCompareSpeed" aria-label="動画比較の再生速度">
+                  <option value=".25">速度 0.25倍</option>
+                  <option value=".5">速度 0.5倍</option>
+                  <option value=".75">速度 0.75倍</option>
+                  <option value="1" selected>速度 1.0倍</option>
+                </select>
+                <button id="videoCompareStart" class="sub">先頭へ</button>
+                <button id="videoCompareSwap" class="sub">左右入替</button>
+              </div>
+              <p class="videoCmpNote">音声は出さず、動きの比較に集中できる設定です</p>
+            </div>
+          </div>
+        </div>
+        <button id="openVideoCompareFS" class="full big">⛶ 動画を全画面で比較</button>
+        <p id="videoCompareMsg" class="msg"></p>
+      </div>
+
       <label for="memo">所見メモ
         <textarea id="memo" rows="5" placeholder="例：右肩の挙上が改善"></textarea>
       </label>
@@ -561,6 +669,16 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     </div>
   </div>
 
+  <!-- 動画の全画面比較（同じプレイヤーを移動して使用） -->
+  <div id="videoCompareView" class="videoCompareView" hidden>
+    <div class="editorBar top">
+      <button id="videoCompareClose" class="sub">閉じる</button>
+      <span>動画 Before / After</span>
+      <span id="videoCompareFsTime" class="time">同期</span>
+    </div>
+    <div id="videoCompareFullHost" class="videoCompareFullHost"></div>
+  </div>
+
   <!-- 全画面カメラ -->
   <div id="camView" class="camView" hidden>
     <div class="editorBar top">
@@ -693,11 +811,13 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <li>①撮影：全画面カメラで、中心線・水平器に合わせて録画</li>
       <li>②再生：スロー・コマ送りで場面を選び「静止画に追加」</li>
       <li>③比較：画像をタップ→編集（中心線・描画・AI解析）</li>
-      <li>「Beforeへ」「Afterへ」で比較。レポートで印刷・PDF化</li>
+      <li>保存動画の「Before」「After」を選ぶと、2本を同期再生できます</li>
+      <li>静止画は「Beforeへ」「Afterへ」で比較。レポートで印刷・PDF化</li>
     </ol>
     <h2>覚えておくこと</h2>
     <ul>
       <li>画像はこの端末の中に保存されます。<b>月1回は「ファイルに書き出す」でバックアップ</b>を。</li>
+      <li>動画は容量が大きいため、必要なものは「端末保存」でも残してください。</li>
       <li>7日以上開かないとデータが消えることがあります。</li>
       <li>AIの数値は推定です。骨格が体に合っているか確認してからお使いください。</li>
     </ul>
@@ -706,11 +826,10 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 
   <script>
 /* =========================================================
-   分析Log v0.3
-   - v0.2の全機能を保持（localStorageキーも同じ：既存データは残ります）
-   - 追加：静止画の編集モード（中心線ドラッグ / グリッド / 移動 / ピンチズーム
-     / ダブルタップでリセット / 保存 / Before・Afterへ反映）
-   - 追加：撮影画面のガイド切替（なし / 中心線 / 3×3 / 5×5）
+   分析Log v1.3
+   - 既存の静止画・患者データを保持
+   - 追加：動画をIndexedDBへ自動保存
+   - 追加：動画Before / Afterの同期再生・速度変更・コマ送り・全画面比較
    =======================================================*/
 (() => {
   "use strict";
@@ -730,30 +849,41 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     before: parseSlot(localStorage.al_before),
     after: parseSlot(localStorage.al_after),
     shots: JSON.parse(localStorage.al_shots || "[]"),
+    videos: [], currentVideoId: null,
+    videoBeforeId: localStorage.al_video_before || "",
+    videoAfterId: localStorage.al_video_after || "",
     recGrid: localStorage.al_rec_grid || "center",
     level: false,
   };
   const saveSlot = (key) => { localStorage["al_" + key] = s[key] ? JSON.stringify(s[key]) : ""; };
 
-  /* ---- 静止画の保存先（IndexedDB：容量が大きく、たくさん貯められる） ---- */
+  /* ---- 静止画・動画の保存先（IndexedDB） ---- */
   const IDB = {
     db: null,
     open() {
       return new Promise((res, rej) => {
-        const r = indexedDB.open("analysisLog", 1);
-        r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains("shots")) d.createObjectStore("shots", { keyPath: "id" }); };
+        const r = indexedDB.open("analysisLog", 2);
+        r.onupgradeneeded = () => {
+          const d = r.result;
+          if (!d.objectStoreNames.contains("shots")) d.createObjectStore("shots", { keyPath: "id" });
+          if (!d.objectStoreNames.contains("videos")) d.createObjectStore("videos", { keyPath: "id" });
+        };
         r.onsuccess = () => { IDB.db = r.result; res(r.result); };
         r.onerror = () => rej(r.error);
       });
     },
-    store(mode) { return IDB.db.transaction("shots", mode).objectStore("shots"); },
+    store(name, mode) { return IDB.db.transaction(name, mode).objectStore(name); },
     req(q) { return new Promise((res, rej) => { q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
-    put(shot) { return IDB.req(IDB.store("readwrite").put(JSON.parse(JSON.stringify(shot)))); },
-    del(id) { return IDB.req(IDB.store("readwrite").delete(id)); },
-    clear() { return IDB.req(IDB.store("readwrite").clear()); },
-    all() { return IDB.req(IDB.store("readonly").getAll()); },
+    put(shot) { return IDB.req(IDB.store("shots", "readwrite").put(JSON.parse(JSON.stringify(shot)))); },
+    del(id) { return IDB.req(IDB.store("shots", "readwrite").delete(id)); },
+    clear() { return IDB.req(IDB.store("shots", "readwrite").clear()); },
+    all() { return IDB.req(IDB.store("shots", "readonly").getAll()); },
+    putVideo(item) { return IDB.req(IDB.store("videos", "readwrite").put(item)); },
+    delVideo(id) { return IDB.req(IDB.store("videos", "readwrite").delete(id)); },
+    clearVideos() { return IDB.req(IDB.store("videos", "readwrite").clear()); },
+    allVideos() { return IDB.req(IDB.store("videos", "readonly").getAll()); },
   };
-  let useIDB = false;
+  let useIDB = false, storeReady = null;
   const saveShotsLS = () => {
     try { localStorage.al_shots = JSON.stringify(s.shots); }
     catch (e) { toast("reviewMsg", "保存容量がいっぱいです。不要な静止画を削除してください。"); }
@@ -784,9 +914,9 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       const ratio = quota ? used / quota : 0;
       if (ratio >= 0.8 && Date.now() - lastQuotaWarn > 60000) {
         lastQuotaWarn = Date.now();
-        toast("reviewMsg", `⚠ 保存容量が残りわずかです（使用 ${mb(used)}MB / 上限 ${mb(quota)}MB）。バックアップを書き出して、古い静止画を削除してください。`);
+        toast("reviewMsg", `⚠ 保存容量が残りわずかです（使用 ${mb(used)}MB / 上限 ${mb(quota)}MB）。不要な動画・静止画を削除し、大切なデータを端末にも保存してください。`);
       }
-      if (showOk) toast("backupMsg", `使用容量：${mb(used)}MB${quota ? " / 目安上限 " + mb(quota) + "MB" : ""}（静止画 ${s.shots.length}枚）`);
+      if (showOk) toast("backupMsg", `使用容量：${mb(used)}MB${quota ? " / 目安上限 " + mb(quota) + "MB" : ""}（動画 ${s.videos.length}本・静止画 ${s.shots.length}枚）`);
       return { used, quota, ratio };
     } catch (e) { if (showOk) toast("backupMsg", "容量を確認できませんでした"); }
   }
@@ -803,13 +933,20 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         localStorage.removeItem("al_shots");   // 旧領域を解放
       }
       s.shots = (await IDB.all()) || [];
+      s.videos = (await IDB.allVideos()) || [];
       s.shots.sort((a, b) => (a.date || 0) - (b.date || 0));
+      s.videos.sort((a, b) => (a.date || 0) - (b.date || 0));
     } catch (e) {
       useIDB = false;                          // 使えない端末では従来どおり
       s.shots = JSON.parse(localStorage.al_shots || "[]");
+      s.videos = [];
+      toast("videoMsg", "この端末ではアプリ内への動画保存を利用できません");
     }
     s.shots.forEach((sh) => { if (sh.patient) addPatient(sh.patient); });   // 既存の名前を名簿に取り込む
+    s.videos.forEach((v) => { if (v.patient) addPatient(v.patient); });
     renderShots();
+    renderVideos();
+    updateVideoCompare();
     ensurePersistentStorage();
     checkStorage(false);
   }
@@ -840,45 +977,57 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     const n = $("patient").value.trim();
     localStorage.al_patient = n;
     addPatient(n);
-    renderShots();
+    renderShots(); renderVideos();
     toast("patientMsg", n ? `「${n}」を保存しました` : "名前を空にしました");
   };
-  // 名前を変更：この患者の静止画すべての名前を付け替える
+  // 名前を変更：この患者の静止画・動画すべての名前を付け替える
   $("renamePatient").onclick = () => {
     const old = $("patient").value.trim();
     if (!old) return toast("patientMsg", "先に変更したい名前を入力または選択してください");
     const neo = (prompt(`「${old}」を何に変更しますか？`, old) || "").trim();
     if (!neo || neo === old) return;
-    let n = 0;
+    let n = 0, vn = 0;
     s.shots.forEach((sh) => { if ((sh.patient || "") === old) { sh.patient = neo; saveShot(sh); n++; } });
+    s.videos.forEach((v) => { if ((v.patient || "") === old) { v.patient = neo; if (useIDB) IDB.putVideo(v).catch(() => {}); vn++; } });
     patients = patients.filter((p) => p !== old);
     if (!patients.includes(neo)) patients.push(neo);
     savePatients(); renderPatientList();
     $("patient").value = neo; localStorage.al_patient = neo;
-    renderShots();
-    toast("patientMsg", `「${neo}」に変更しました（静止画 ${n}枚も変更）`);
+    renderShots(); renderVideos(); updateVideoCompare();
+    toast("patientMsg", `「${neo}」に変更しました（静止画 ${n}枚・動画 ${vn}本も変更）`);
   };
-  // 名前を削除：名簿から消す。画像を消すかは別途たずねる
-  $("deletePatient").onclick = () => {
+  // 名前を削除：名簿から消す。画像・動画を消すかは別途たずねる
+  $("deletePatient").onclick = async () => {
     const name = $("patient").value.trim();
     if (!name) return toast("patientMsg", "削除したい名前を入力または選択してください");
     const mine = s.shots.filter((sh) => (sh.patient || "") === name);
+    const mineVideos = s.videos.filter((v) => (v.patient || "") === name);
     if (!confirm(`「${name}」を名簿から削除します。よろしいですか？`)) return;
     patients = patients.filter((p) => p !== name);
     savePatients(); renderPatientList();
-    if (mine.length && confirm(`この患者の静止画 ${mine.length}枚も削除しますか？
+    if ((mine.length || mineVideos.length) && confirm(`この患者の静止画 ${mine.length}枚・動画 ${mineVideos.length}本も削除しますか？
 
-OK＝画像も削除する
-キャンセル＝画像は残す`)) {
+OK＝画像・動画も削除する
+キャンセル＝データは残す`)) {
       const ids = new Set(mine.map((x) => x.id));
+      const videoIds = new Set(mineVideos.map((x) => x.id));
+      const videoIdStrings = new Set(mineVideos.map((x) => String(x.id)));
       s.shots = s.shots.filter((x) => !ids.has(x.id));
+      s.videos = s.videos.filter((x) => !videoIds.has(x.id));
       if (useIDB) ids.forEach((id) => IDB.del(id).catch(() => {})); else saveShotsLS();
-      toast("patientMsg", `「${name}」と静止画 ${mine.length}枚を削除しました`);
+      if (useIDB) videoIds.forEach((id) => IDB.delVideo(id).catch(() => {}));
+      if (videoIdStrings.has(String(s.videoBeforeId))) { s.videoBeforeId = ""; localStorage.removeItem("al_video_before"); }
+      if (videoIdStrings.has(String(s.videoAfterId))) { s.videoAfterId = ""; localStorage.removeItem("al_video_after"); }
+      if (videoIdStrings.has(String(s.currentVideoId))) {
+        $("video").pause(); $("video").removeAttribute("src"); $("video").load(); s.currentVideoId = null;
+        if (s.url) { URL.revokeObjectURL(s.url); s.url = null; }
+      }
+      toast("patientMsg", `「${name}」と静止画 ${mine.length}枚・動画 ${mineVideos.length}本を削除しました`);
     } else {
-      toast("patientMsg", `「${name}」を名簿から削除しました（静止画は残しています）`);
+      toast("patientMsg", `「${name}」を名簿から削除しました（画像・動画は残しています）`);
     }
     $("patient").value = ""; localStorage.al_patient = "";
-    renderShots();
+    renderShots(); renderVideos(); updateVideoCompare();
   };
   renderPatientList();
 
@@ -1020,16 +1169,68 @@ OK＝画像も削除する
     await stopStream(); closeCamView();
   };
 
-  function loadVideo(blob) {
+  function loadVideo(blob, item = null) {
     if (s.url) URL.revokeObjectURL(s.url);
     s.url = URL.createObjectURL(blob);
+    s.currentVideoId = item ? item.id : null;
     $("video").src = s.url;   // 静止画一覧は消さずに貯めていく
   }
+
+  function readVideoDuration(blob) {
+    return new Promise((resolve) => {
+      const probe = document.createElement("video"), url = URL.createObjectURL(blob);
+      let done = false;
+      const finish = (value) => {
+        if (done) return;
+        done = true; URL.revokeObjectURL(url); probe.removeAttribute("src");
+        resolve(Number.isFinite(value) ? value : 0);
+      };
+      probe.preload = "metadata";
+      probe.onloadedmetadata = () => finish(probe.duration);
+      probe.onerror = () => finish(0);
+      probe.src = url;
+      setTimeout(() => finish(0), 8000);
+    });
+  }
+
+  async function saveVideoBlob(blob, originalName = "") {
+    if (storeReady) await storeReady;
+    if (!useIDB) { toast("videoMsg", "この端末ではアプリ内に動画を保存できません。端末の元動画は消さないでください"); return null; }
+    const item = {
+      id: Date.now() + Math.random(),
+      blob,
+      name: originalName || "撮影動画",
+      patient: ($("patient").value || "").trim(),
+      date: Date.now(),
+      duration: await readVideoDuration(blob),
+      size: blob.size || 0,
+      type: blob.type || "video/mp4",
+    };
+    try {
+      await IDB.putVideo(item);
+      s.videos.push(item);
+      if (item.patient) addPatient(item.patient);
+      if (!s.videoBeforeId) setVideoSlot("before", item.id);
+      else if (!s.videoAfterId) setVideoSlot("after", item.id);
+      renderVideos(); updateVideoCompare(); checkStorage(false);
+      toast("videoMsg", `動画を端末内に保存しました（全${s.videos.length}本）`);
+      return item;
+    } catch (e) {
+      toast("videoMsg", "動画を保存できませんでした。空き容量を確認し、元動画を端末に残してください");
+      return null;
+    }
+  }
+
   $("startRec").onclick = () => {
     s.chunks = [];
     s.rec = new MediaRecorder(s.stream);
     s.rec.ondataavailable = (e) => e.data.size && s.chunks.push(e.data);
-    s.rec.onstop = () => { loadVideo(new Blob(s.chunks, { type: s.rec.mimeType || "video/webm" })); closeCamView(); openTab("review"); };
+    s.rec.onstop = async () => {
+      const blob = new Blob(s.chunks, { type: s.rec.mimeType || "video/mp4" });
+      loadVideo(blob); closeCamView(); openTab("review"); await stopStream();
+      const saved = await saveVideoBlob(blob, "撮影動画");
+      if (saved) { s.currentVideoId = saved.id; toast("reviewMsg", "撮影動画を保存しました。静止画の切り出しもできます"); }
+    };
     s.rec.start();
     $("startRec").disabled = true; $("stopRec").disabled = false;
     $("cameraMsg").textContent = "● 録画中";
@@ -1039,7 +1240,14 @@ OK＝画像も削除する
     $("startRec").disabled = false; $("stopRec").disabled = true;
     $("cameraMsg").textContent = "";
   };
-  $("upload").onchange = (e) => { if (e.target.files[0]) { loadVideo(e.target.files[0]); openTab("review"); } };
+  $("upload").onchange = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    loadVideo(file); openTab("review");
+    const saved = await saveVideoBlob(file, file.name || "端末から選択");
+    if (saved) s.currentVideoId = saved.id;
+  };
 
   /* =======================================================
      ② 再生・静止画切り出し
@@ -1063,6 +1271,119 @@ OK＝画像も削除する
     if (!ms) return "";
     const d = new Date(ms);
     return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const fmtBytes = (n) => n >= 1048576 ? (n / 1048576).toFixed(n >= 10485760 ? 0 : 1) + "MB" : Math.max(1, Math.round(n / 1024)) + "KB";
+  const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const videoById = (id) => s.videos.find((v) => String(v.id) === String(id)) || null;
+
+  function setVideoSlot(which, id) {
+    const key = which === "before" ? "videoBeforeId" : "videoAfterId";
+    const other = which === "before" ? "videoAfterId" : "videoBeforeId";
+    s[key] = id ? String(id) : "";
+    if (s[key] && s[key] === s[other]) s[other] = "";
+    localStorage.al_video_before = s.videoBeforeId;
+    localStorage.al_video_after = s.videoAfterId;
+    updateVideoCompare(); renderVideos();
+  }
+
+  function renderVideos() {
+    const box = $("videoList");
+    if (!box) return;
+    const cur = ($("patient").value || "").trim();
+    const onlyMine = $("filterVideoPatient").checked && cur;
+    const list = (onlyMine ? s.videos.filter((v) => (v.patient || "") === cur) : s.videos).slice().sort((a, b) => (b.date || 0) - (a.date || 0));
+    $("videoCount").textContent = onlyMine ? `${list.length}本 / 全${s.videos.length}本` : s.videos.length + "本";
+    box.innerHTML = "";
+    if (!list.length) { box.innerHTML = `<p>${onlyMine ? "この患者名の動画はありません。" : "まだ保存動画はありません。"}</p>`; return; }
+    list.forEach((item) => {
+      const card = document.createElement("div");
+      const isBefore = String(item.id) === String(s.videoBeforeId), isAfter = String(item.id) === String(s.videoAfterId);
+      card.className = "videoCard" + (isBefore ? " onBefore" : "") + (isAfter ? " onAfter" : "");
+      const who = item.patient ? `<span class="who">${esc(item.patient)}</span><br>` : "";
+      card.innerHTML =
+        `<div class="videoIcon">▶</div>` +
+        `<div class="videoBadges">${isBefore ? '<span class="videoBadge before">Before</span>' : ""}${isAfter ? '<span class="videoBadge after">After</span>' : ""}</div>` +
+        `<p class="videoMeta">${who}${esc(fmtDate(item.date))}<br>${esc(fmtTime(item.duration || 0))}・${esc(fmtBytes(item.size || (item.blob && item.blob.size) || 0))}</p>` +
+        `<div class="videoBtns">` +
+        `<button data-va="load" class="loadVideo">▶ 読込・再生</button>` +
+        `<button data-va="before">Before</button><button data-va="after">After</button>` +
+        `<button data-va="save" class="sub">端末保存</button><button data-va="rename" class="sub">名前</button>` +
+        `<button data-va="delete" class="deleteVideo">削除</button>` +
+        `</div>`;
+      card.querySelectorAll("button").forEach((b) => { b.onclick = () => videoAction(b.dataset.va, item); });
+      box.appendChild(card);
+    });
+  }
+
+  async function saveVideoToDevice(item) {
+    const safe = (item.patient || "patient").replace(/[\/:*?"<>|]/g, "_");
+    const type = item.type || (item.blob && item.blob.type) || "video/mp4";
+    const ext = type.includes("webm") ? "webm" : type.includes("quicktime") ? "mov" : "mp4";
+    const name = `${safe}_${fmtDate(item.date).replace(/[\/: ]/g, "-")}.${ext}`;
+    try {
+      const file = new File([item.blob], name, { type });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "分析Log 動画" });
+        toast("videoMsg", "動画を共有・保存しました"); return;
+      }
+    } catch (e) {
+      if (e && e.name === "AbortError") { toast("videoMsg", "保存を中止しました"); return; }
+    }
+    const url = URL.createObjectURL(item.blob), a = document.createElement("a");
+    a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 20000);
+    toast("videoMsg", "動画ファイルを保存しました");
+  }
+
+  async function videoAction(action, item) {
+    if (action === "load") {
+      loadVideo(item.blob, item); openTab("review");
+      $("video").currentTime = 0;
+      toast("reviewMsg", `${item.patient || "名前なし"}・${fmtDate(item.date)}の動画を読み込みました`);
+      window.scrollTo({ top: $("review").offsetTop - 70, behavior: "smooth" });
+    } else if (action === "before" || action === "after") {
+      setVideoSlot(action, item.id);
+      const side = action === "before" ? "Before" : "After";
+      toast("videoMsg", `動画を${side}に設定しました。③比較で同期再生できます`);
+      toast("videoCompareMsg", `動画を${side}に設定しました`);
+    } else if (action === "save") {
+      await saveVideoToDevice(item);
+    } else if (action === "rename") {
+      const neo = prompt("この動画の患者名を変更", item.patient || "");
+      if (neo !== null) { item.patient = neo.trim(); await IDB.putVideo(item); addPatient(item.patient); renderVideos(); updateVideoCompare(); }
+    } else if (action === "delete") {
+      if (!confirm("この保存動画を削除しますか？")) return;
+      if (String(s.videoBeforeId) === String(item.id)) setVideoSlot("before", "");
+      if (String(s.videoAfterId) === String(item.id)) setVideoSlot("after", "");
+      s.videos = s.videos.filter((v) => String(v.id) !== String(item.id));
+      await IDB.delVideo(item.id);
+      if (String(s.currentVideoId) === String(item.id)) {
+        $("video").pause(); $("video").removeAttribute("src"); $("video").load(); s.currentVideoId = null;
+        if (s.url) { URL.revokeObjectURL(s.url); s.url = null; }
+      }
+      renderVideos(); updateVideoCompare(); checkStorage(false);
+      toast("videoMsg", "動画を削除しました");
+    }
+  }
+
+  $("filterVideoPatient").onchange = renderVideos;
+  $("goVideoCompare").onclick = () => {
+    if (!s.videoBeforeId && !s.videoAfterId) return toast("videoMsg", "先に保存動画からBeforeまたはAfterを設定してください");
+    openTab("compare");
+    setTimeout(() => $("videoCompareHome").scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  };
+  $("clearVideos").onclick = async () => {
+    if (!s.videos.length) return toast("videoMsg", "保存動画はありません");
+    if (!confirm(`保存動画 ${s.videos.length}本をすべて削除しますか？\nこの操作は元に戻せません。`)) return;
+    pauseVideoCompare();
+    s.videos = []; s.videoBeforeId = ""; s.videoAfterId = "";
+    localStorage.removeItem("al_video_before"); localStorage.removeItem("al_video_after");
+    if (useIDB) await IDB.clearVideos();
+    if (s.currentVideoId != null) {
+      $("video").pause(); $("video").removeAttribute("src"); $("video").load(); s.currentVideoId = null;
+      if (s.url) { URL.revokeObjectURL(s.url); s.url = null; }
+    }
+    renderVideos(); updateVideoCompare(); toast("videoMsg", "保存動画をすべて削除しました");
   };
 
   function captureShot() {
@@ -1210,11 +1531,146 @@ OK＝画像も削除する
     saveSlot("before"); saveSlot("after");
     updateCompare();
   };
+
+  // ---- 動画 Before / After 同期比較 ----
+  const videoComparePlayers = { before: $("videoBefore"), after: $("videoAfter") };
+  const videoCompareUrls = { before: "", after: "" };
+  let videoComparePlaying = false, videoCompareRaf = 0, videoCompareBase = 0, videoCompareStarted = 0, videoCompareCurrent = 0;
+
+  function videoCompareItems() {
+    return { before: videoById(s.videoBeforeId), after: videoById(s.videoAfterId) };
+  }
+  function videoCompareDuration() {
+    const items = videoCompareItems();
+    return Math.max(
+      (items.before && items.before.duration) || videoComparePlayers.before.duration || 0,
+      (items.after && items.after.duration) || videoComparePlayers.after.duration || 0
+    );
+  }
+  function updateVideoCompareClock(t = videoCompareCurrent) {
+    const duration = videoCompareDuration();
+    videoCompareCurrent = clamp(Number.isFinite(t) ? t : 0, 0, duration || 0);
+    $("videoCompareNow").textContent = fmtTime(videoCompareCurrent);
+    $("videoCompareEnd").textContent = fmtTime(duration || 0);
+    $("videoCompareFsTime").textContent = fmtTime(videoCompareCurrent);
+    $("videoCompareSeek").value = duration ? Math.round(videoCompareCurrent / duration * 1000) : 0;
+  }
+  function seekVideoCompare(t) {
+    pauseVideoCompare(false);
+    videoCompareCurrent = clamp(t, 0, videoCompareDuration() || 0);
+    Object.values(videoComparePlayers).forEach((p) => {
+      if (p.src && Number.isFinite(p.duration)) p.currentTime = Math.min(videoCompareCurrent, p.duration);
+    });
+    updateVideoCompareClock();
+  }
+  function pauseVideoCompare(refresh = true) {
+    if (videoComparePlaying) {
+      const elapsed = (performance.now() - videoCompareStarted) / 1000;
+      videoCompareCurrent = Math.min(videoCompareDuration(), videoCompareBase + elapsed * (+$("videoCompareSpeed").value || 1));
+    }
+    videoComparePlaying = false;
+    if (videoCompareRaf) cancelAnimationFrame(videoCompareRaf);
+    videoCompareRaf = 0;
+    Object.values(videoComparePlayers).forEach((p) => p.pause());
+    $("videoComparePlay").textContent = videoCompareCurrent >= videoCompareDuration() - 0.02 && videoCompareDuration() ? "↺ もう一度" : "▶ 同期再生";
+    if (refresh) updateVideoCompareClock();
+  }
+  function tickVideoCompare(now) {
+    if (!videoComparePlaying) return;
+    const rate = +$("videoCompareSpeed").value || 1, duration = videoCompareDuration();
+    const target = Math.min(duration, videoCompareBase + (now - videoCompareStarted) / 1000 * rate);
+    videoCompareCurrent = target;
+    Object.values(videoComparePlayers).forEach((p) => {
+      if (!p.src || !Number.isFinite(p.duration)) return;
+      const ownTarget = Math.min(target, p.duration);
+      if (Math.abs(p.currentTime - ownTarget) > 0.12) p.currentTime = ownTarget;
+      if ((!Number.isFinite(p.duration) || target < p.duration - 0.02) && p.paused) p.play().catch(() => {});
+      if (target >= p.duration - 0.02 && !p.paused) p.pause();
+    });
+    updateVideoCompareClock(target);
+    if (target >= duration - 0.01) { pauseVideoCompare(); return; }
+    videoCompareRaf = requestAnimationFrame(tickVideoCompare);
+  }
+  function playVideoCompare() {
+    const active = Object.values(videoComparePlayers).filter((p) => p.src);
+    if (!active.length) return toast("videoCompareMsg", "先に保存動画からBeforeまたはAfterを設定してください");
+    if (videoComparePlaying) { pauseVideoCompare(); return; }
+    const duration = videoCompareDuration();
+    if (!duration) return toast("videoCompareMsg", "動画を読み込み中です。少し待ってから再生してください");
+    if (videoCompareCurrent >= duration - 0.02) seekVideoCompare(0);
+    const rate = +$("videoCompareSpeed").value || 1;
+    active.forEach((p) => {
+      p.muted = true; p.playbackRate = rate;
+      if (Number.isFinite(p.duration)) p.currentTime = Math.min(videoCompareCurrent, p.duration);
+      if (!Number.isFinite(p.duration) || videoCompareCurrent < p.duration - 0.02) p.play().catch(() => {});
+    });
+    videoCompareBase = videoCompareCurrent; videoCompareStarted = performance.now(); videoComparePlaying = true;
+    $("videoComparePlay").textContent = "Ⅱ 一時停止";
+    toast("videoCompareMsg", active.length === 2 ? "2本を同期再生しています" : "片側の動画を再生しています");
+    videoCompareRaf = requestAnimationFrame(tickVideoCompare);
+  }
+
+  function setVideoCompareSource(which, item) {
+    const player = videoComparePlayers[which], cap = $(which === "before" ? "videoBeforeCap" : "videoAfterCap");
+    const empty = $(which === "before" ? "videoBeforeEmpty" : "videoAfterEmpty");
+    if (videoCompareUrls[which]) { URL.revokeObjectURL(videoCompareUrls[which]); videoCompareUrls[which] = ""; }
+    player.pause(); player.removeAttribute("src"); player.load();
+    if (!item || !item.blob) {
+      player.style.display = "none"; empty.style.display = "block"; cap.textContent = "未設定"; return;
+    }
+    const url = URL.createObjectURL(item.blob); videoCompareUrls[which] = url;
+    player.src = url; player.style.display = "block"; empty.style.display = "none";
+    cap.textContent = `${item.patient || "名前なし"}・${fmtDate(item.date)}`;
+    player.onloadedmetadata = () => {
+      if (Number.isFinite(player.duration) && player.duration > 0 && Math.abs((item.duration || 0) - player.duration) > 0.01) {
+        item.duration = player.duration; if (useIDB) IDB.putVideo(item).catch(() => {});
+      }
+      updateVideoCompareClock();
+    };
+  }
+
+  function updateVideoCompare() {
+    pauseVideoCompare(false); videoCompareCurrent = 0;
+    const items = videoCompareItems();
+    if (s.videoBeforeId && !items.before) { s.videoBeforeId = ""; localStorage.removeItem("al_video_before"); }
+    if (s.videoAfterId && !items.after) { s.videoAfterId = ""; localStorage.removeItem("al_video_after"); }
+    setVideoCompareSource("before", items.before);
+    setVideoCompareSource("after", items.after);
+    updateVideoCompareClock(0);
+  }
+
+  $("videoComparePlay").onclick = playVideoCompare;
+  $("videoCompareBack").onclick = () => seekVideoCompare(videoCompareCurrent - 1 / 30);
+  $("videoCompareForward").onclick = () => seekVideoCompare(videoCompareCurrent + 1 / 30);
+  $("videoCompareStart").onclick = () => seekVideoCompare(0);
+  $("videoCompareSpeed").onchange = () => {
+    const wasPlaying = videoComparePlaying; pauseVideoCompare();
+    Object.values(videoComparePlayers).forEach((p) => { p.playbackRate = +$("videoCompareSpeed").value; });
+    if (wasPlaying) playVideoCompare();
+  };
+  $("videoCompareSeek").oninput = (e) => {
+    const duration = videoCompareDuration(); seekVideoCompare(duration * (+e.target.value / 1000));
+  };
+  $("videoCompareSwap").onclick = () => {
+    [s.videoBeforeId, s.videoAfterId] = [s.videoAfterId, s.videoBeforeId];
+    localStorage.al_video_before = s.videoBeforeId; localStorage.al_video_after = s.videoAfterId;
+    updateVideoCompare(); renderVideos();
+  };
+  $("openVideoCompareFS").onclick = () => {
+    if (!s.videoBeforeId && !s.videoAfterId) return toast("videoCompareMsg", "先に保存動画からBeforeまたはAfterを設定してください");
+    $("videoCompareFullHost").appendChild($("videoCompareStage"));
+    $("videoCompareView").hidden = false; document.body.style.overflow = "hidden";
+  };
+  $("videoCompareClose").onclick = () => {
+    pauseVideoCompare(); $("videoCompareHome").appendChild($("videoCompareStage"));
+    $("videoCompareView").hidden = true; document.body.style.overflow = "";
+  };
+
   $("memo").value = localStorage.al_memo || "";
   $("saveMemo").onclick = () => { localStorage.al_memo = $("memo").value; toast("memoMsg", "メモを保存しました"); };
 
   /* =======================================================
-     編集モード（v0.3の中心機能）
+     静止画の編集モード
      =======================================================*/
   const ed = { shot: null, mode: "center", vx: 0.5, hy: 0.5, tx: 0, ty: 0, scale: 1, nw: 1, nh: 1 };
   const editStage = $("editStage"), editImg = $("editImg"), editWrap = $("editImgWrap"), editGuides = $("editGuides");
@@ -1889,7 +2345,7 @@ OK＝画像も削除する
         const file = new File([blob], name, { type: "application/json" });
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({ files: [file], title: "分析Log バックアップ" });
-          toast("backupMsg", `静止画 ${s.shots.length}枚を書き出しました`);
+          toast("backupMsg", `静止画 ${s.shots.length}枚を書き出しました（動画は含まれません）`);
           return;
         }
       } catch (shareErr) {
@@ -1900,7 +2356,7 @@ OK＝画像も削除する
       const a = document.createElement("a");
       a.href = url; a.download = name; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 20000);
-      toast("backupMsg", `静止画 ${s.shots.length}枚を書き出しました`);
+      toast("backupMsg", `静止画 ${s.shots.length}枚を書き出しました（動画は含まれません）`);
     } catch (e) { toast("backupMsg", "書き出せませんでした：" + e.message); }
   };
 
@@ -2006,16 +2462,23 @@ OK＝画像も削除する
      患者を呼び出す（登録した患者の一覧）
      =======================================================*/
   function patientSummary() {
-    // 名簿と、静止画に付いている名前をまとめて集計する
+    // 名簿と、静止画・動画に付いている名前をまとめて集計する
     const map = new Map();
-    patients.filter(Boolean).forEach((n) => map.set(n, { name: n, count: 0, last: 0, thumb: "" }));
+    patients.filter(Boolean).forEach((n) => map.set(n, { name: n, count: 0, videoCount: 0, last: 0, thumb: "" }));
     s.shots.forEach((sh) => {
       const n = (sh.patient || "").trim();
       if (!n) return;
-      if (!map.has(n)) map.set(n, { name: n, count: 0, last: 0, thumb: "" });
+      if (!map.has(n)) map.set(n, { name: n, count: 0, videoCount: 0, last: 0, thumb: "" });
       const r = map.get(n);
       r.count++;
       if ((sh.date || 0) >= r.last) { r.last = sh.date || 0; r.thumb = sh.edited || sh.data; }
+    });
+    s.videos.forEach((v) => {
+      const n = (v.patient || "").trim();
+      if (!n) return;
+      if (!map.has(n)) map.set(n, { name: n, count: 0, videoCount: 0, last: 0, thumb: "" });
+      const r = map.get(n); r.videoCount++;
+      if ((v.date || 0) > r.last) r.last = v.date || 0;
     });
     return [...map.values()].sort((a, b) => (b.last - a.last) || a.name.localeCompare(b.name, "ja"));
   }
@@ -2036,12 +2499,12 @@ OK＝画像も削除する
       row.innerHTML =
         (p.thumb ? `<img class="pThumb" src="${p.thumb}" alt="">` : `<div class="pThumb"></div>`) +
         `<div class="pInfo"><div class="pName">${p.name}</div>` +
-        `<div class="pSub">${p.count}枚${p.last ? "・最終 " + fmtDate(p.last) : ""}</div></div>` +
+        `<div class="pSub">静止画 ${p.count}枚・動画 ${p.videoCount}本${p.last ? "・最終 " + fmtDate(p.last) : ""}</div></div>` +
         `<button class="pGo sub">履歴</button>`;
       // 行をタップ：この患者を選ぶ
       row.onclick = () => {
         $("patient").value = p.name; localStorage.al_patient = p.name;
-        addPatient(p.name); renderShots();
+        addPatient(p.name); renderShots(); renderVideos();
         $("patientsView").hidden = true; document.body.style.overflow = "";
         toast("patientMsg", `「${p.name}」を呼び出しました`);
       };
@@ -2049,7 +2512,7 @@ OK＝画像も削除する
       row.querySelector(".pGo").onclick = (e) => {
         e.stopPropagation();
         $("patient").value = p.name; localStorage.al_patient = p.name;
-        addPatient(p.name); renderShots();
+        addPatient(p.name); renderShots(); renderVideos();
         $("patientsView").hidden = true;
         openHistory();
       };
@@ -2070,7 +2533,10 @@ OK＝画像も削除する
   $("close").onclick = () => dialog.close();
 
   $("filterPatient").onchange = renderShots;
-  $("patient").addEventListener("input", () => { if ($("filterPatient").checked) renderShots(); });
+  $("patient").addEventListener("input", () => {
+    if ($("filterPatient").checked) renderShots();
+    if ($("filterVideoPatient").checked) renderVideos();
+  });
 
   setSegmented("record", s.recGrid);
   setLevelBtn();
@@ -2078,7 +2544,8 @@ OK＝画像も削除する
   applyClinicName();
   updateCompare();
   renderShots();
-  initStore();   // 保存済みの静止画を読み込む（旧データも引き継ぎ）
+  renderVideos();
+  storeReady = initStore();   // 保存済みの静止画・動画を読み込む（旧データも引き継ぎ）
 })();
 
 </script>
