@@ -862,14 +862,22 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     db: null,
     open() {
       return new Promise((res, rej) => {
-        const r = indexedDB.open("analysisLog", 2);
-        r.onupgradeneeded = () => {
-          const d = r.result;
-          if (!d.objectStoreNames.contains("shots")) d.createObjectStore("shots", { keyPath: "id" });
-          if (!d.objectStoreNames.contains("videos")) d.createObjectStore("videos", { keyPath: "id" });
+        // 保存済みDBの版が2より新しい場合も、中身を消さず現在の版で開き直す。
+        const start = (withVersion) => {
+          const r = withVersion ? indexedDB.open("analysisLog", 2) : indexedDB.open("analysisLog");
+          r.onupgradeneeded = () => {
+            const d = r.result;
+            if (!d.objectStoreNames.contains("shots")) d.createObjectStore("shots", { keyPath: "id" });
+            if (!d.objectStoreNames.contains("videos")) d.createObjectStore("videos", { keyPath: "id" });
+          };
+          r.onsuccess = () => { IDB.db = r.result; res(r.result); };
+          r.onerror = () => {
+            if (withVersion && r.error && r.error.name === "VersionError") start(false);
+            else rej(r.error || new Error("IndexedDBを開けませんでした"));
+          };
+          r.onblocked = () => rej(new Error("別の画面が保存領域を使用中です"));
         };
-        r.onsuccess = () => { IDB.db = r.result; res(r.result); };
-        r.onerror = () => rej(r.error);
+        start(true);
       });
     },
     store(name, mode) { return IDB.db.transaction(name, mode).objectStore(name); },
@@ -923,24 +931,41 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 
   async function initStore() {
     try {
-      if (!window.indexedDB) throw new Error("no idb");
+      if (!window.indexedDB) throw new Error("IndexedDB非対応");
       await IDB.open();
       useIDB = true;
+
       // これまでlocalStorageに入っていた画像を引き継ぐ
       const old = JSON.parse(localStorage.al_shots || "[]");
       if (old.length) {
         for (const sh of old) await IDB.put(sh);
         localStorage.removeItem("al_shots");   // 旧領域を解放
       }
-      s.shots = (await IDB.all()) || [];
-      s.videos = (await IDB.allVideos()) || [];
+
+      // 静止画と動画を別々に読む。片方のエラーで、もう片方を0件表示にしない。
+      try {
+        s.shots = (await IDB.all()) || [];
+      } catch (shotErr) {
+        s.shots = JSON.parse(localStorage.al_shots || "[]");
+        toast("reviewMsg", `静止画の保存領域を読み込めません（${shotErr.name || shotErr.message || "不明なエラー"}）`);
+      }
+      try {
+        s.videos = (await IDB.allVideos()) || [];
+      } catch (videoErr) {
+        s.videos = [];
+        toast("videoMsg", `動画の保存領域を読み込めません（${videoErr.name || videoErr.message || "不明なエラー"}）`);
+      }
+
       s.shots.sort((a, b) => (a.date || 0) - (b.date || 0));
       s.videos.sort((a, b) => (a.date || 0) - (b.date || 0));
+      localStorage.removeItem("al_storage_error");
     } catch (e) {
       useIDB = false;                          // 使えない端末では従来どおり
       s.shots = JSON.parse(localStorage.al_shots || "[]");
       s.videos = [];
-      toast("videoMsg", "この端末ではアプリ内への動画保存を利用できません");
+      const detail = e && (e.name || e.message) ? (e.name || e.message) : "不明なエラー";
+      localStorage.al_storage_error = detail;
+      toast("videoMsg", `保存領域を開けません（${detail}）。データは削除せず、そのまま保護しています`);
     }
     s.shots.forEach((sh) => { if (sh.patient) addPatient(sh.patient); });   // 既存の名前を名簿に取り込む
     s.videos.forEach((v) => { if (v.patient) addPatient(v.patient); });
